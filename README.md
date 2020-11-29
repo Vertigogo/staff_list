@@ -6,4 +6,4 @@ This project was created for generating code to be used as textures () for scree
 It was difficult to find sufficiently good CC0 stock photography of the type of code, styled, as desired.
 
 ### Where did the code snippets come from?
-To keep things CC0 and 
+To keep things CC0 and free from restrictions, all code snippets were taken from projects with Unlicense lice
