@@ -10,4 +10,6 @@ To keep things CC0 and free from restrictions, all code snippets were taken from
 All names and email addresses have been stripped for privacy and to keep the visuals as ambiguous as possible.
 
 ### Where did the generators come from?
-The data
+The data generation scripts were written by me.
+
+Because this repo relies on code licensed under 
