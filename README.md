@@ -7,4 +7,7 @@ It was difficult to find sufficiently good CC0 stock photography of the type of 
 
 ### Where did the code snippets come from?
 To keep things CC0 and free from restrictions, all code snippets were taken from projects with Unlicense licenses.
-All names and email addresses have been stripped for privacy and to keep 
+All names and email addresses have been stripped for privacy and to keep the visuals as ambiguous as possible.
+
+### Where did the generators come from?
+The data
