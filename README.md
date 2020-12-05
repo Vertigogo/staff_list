@@ -14,4 +14,10 @@ The data generation scripts were written by me.
 
 Because this repo relies on code licensed under the most unrescricted license available, it is being released under that same license.
 
-If you would like to add your own scripts, please submit a pull request along with examples for us
+If you would like to add your own scripts, please submit a pull request along with examples for use in the README!
+
+## Requirements
+Python 3+
+
+## Usage
+The files in this project 
