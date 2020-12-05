@@ -20,4 +20,4 @@ If you would like to add your own scripts, please submit a pull request along wi
 Python 3+
 
 ## Usage
-The files in this project 
+The files in this project are designed as scripts and thus intended to be run via a commandline i
