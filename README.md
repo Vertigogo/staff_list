@@ -12,4 +12,4 @@ All names and email addresses have been stripped for privacy and to keep the vis
 ### Where did the generators come from?
 The data generation scripts were written by me.
 
-Because this repo relies on code licensed under 
+Because this repo relies on code licensed under the most unrescricted license available, it is being released under that same li
