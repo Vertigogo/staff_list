@@ -31,4 +31,5 @@ single file, read out code at constant default speed
 
 two files, from different directories, read out at non-constant rate
 
-    python code_reader.py --ftr python_code/code_snippet1.py c_code/code_snippet1.c --rsmax=.3 
+    python code_reader.py --ftr python_code/code_snippet1.py c_code/code_snippet1.c --rsmax=.3 --rsmin=.0001 
+    python code_reader.py --ftr python_code/code_snippe
