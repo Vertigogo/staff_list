@@ -25,4 +25,8 @@ The files in this project are designed as scripts and thus intended to be run vi
 ## Examples
 
 ### code reader
-single file, read out code at constant default
+single file, read out code at constant default speed
+
+    python code_reader.py --ftr python_code/code_snippet1.py
+
+two files,
