@@ -33,4 +33,6 @@ two files, from different directories, read out at non-constant rate
 
     python code_reader.py --ftr python_code/code_snippet1.py c_code/code_snippet1.c --rsmax=.3 --rsmin=.0001 
     python code_reader.py --ftr python_code/code_snippet5.py --rsmax=.08 --rsmin=.00001 
-multi-file, all from the same directory, read out at non-con
+multi-file, all from the same directory, read out at non-constant rate
+
+    python code_reader.py --sd='c_code/' --ftr code_snippet1.c
