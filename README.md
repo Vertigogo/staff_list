@@ -38,4 +38,8 @@ multi-file, all from the same directory, read out at non-constant rate
     python code_reader.py --sd='c_code/' --ftr code_snippet1.c code_snippet2.c --rsmax=.3 --rsmin=.0001
 
 ### random hex dump
-basic run, all defaul
+basic run, all defaults
+
+    python random_hex_dump.py 
+    
+run with spaces, a smaller data chunk size, and set sl
