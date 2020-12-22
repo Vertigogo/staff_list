@@ -48,4 +48,4 @@ run with spaces, a smaller data chunk size, and set slower output speed
     
 run with randomly sized data chunks
 
-     python random_hex_dump.py --spaces=True
+     python random_hex_dump.py --spaces=True --rchars_min=5 rchars_max=30
