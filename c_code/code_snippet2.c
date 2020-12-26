@@ -72,3 +72,85 @@ cleanup_closed(FILE *file)
 }
 
 /**
+ * Free resources held by the cleanup registry.
+ */
+static void
+cleanup_free(void)
+{
+    size_t i;
+    for (i = 0; i < sizeof(cleanup) / sizeof(*cleanup); i++)
+        free(cleanup[i].name);
+}
+
+/**
+ * Print a message, cleanup, and exit the program with a failure code.
+ */
+static void
+fatal(const char *fmt, ...)
+{
+    unsigned i;
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, "enchive: ");
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+    for (i = 0; i < sizeof(cleanup) / sizeof(*cleanup); i++) {
+        if (cleanup[i].file)
+            fclose(cleanup[i].file);
+        if (cleanup[i].name)
+            remove(cleanup[i].name);
+    }
+    va_end(ap);
+    exit(EXIT_FAILURE);
+}
+
+/**
+ * Print a non-fatal warning message.
+ */
+static void
+warning(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, "warning: ");
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+    va_end(ap);
+}
+
+/**
+ * Return a copy of S, which may be NULL.
+ * Abort the program if out of memory.
+ */
+static char *
+dupstr(const char *s)
+{
+    char *copy = 0;
+    if (s) {
+        size_t len = strlen(s) + 1;
+        copy = malloc(len);
+        if (!copy)
+            fatal("out of memory");
+        memcpy(copy, s, len);
+    }
+    return copy;
+}
+
+/**
+ * Concatenate N strings as a new string.
+ * Abort the program if out of memory.
+ */
+static char *
+joinstr(int n, ...)
+{
+    int i;
+    va_list ap;
+    char *p, *str;
+    size_t len = 1;
+
+    va_start(ap, n);
+    for (i = 0; i < n; i++) {
+        char *s = va_arg(ap, char *);
+        len += strlen(s);
+    }
+    va_end(ap);
