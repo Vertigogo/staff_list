@@ -154,3 +154,99 @@ joinstr(int n, ...)
         len += strlen(s);
     }
     va_end(ap);
+
+    p = str = malloc(len);
+    if (!str)
+        fatal("out of memory");
+
+    va_start(ap, n);
+    for (i = 0; i < n; i++) {
+        char *s = va_arg(ap, char *);
+        size_t slen = strlen(s);
+        memcpy(p, s, slen);
+        p += slen;
+    }
+    va_end(ap);
+
+    *p = 0;
+    return str;
+}
+
+/**
+ * Read the protection key from a key agent identified by its IV.
+ */
+static int agent_read(uint8_t *key, const uint8_t *id);
+
+/**
+ * Serve the protection key on a key agent identified by its IV.
+ */
+static int agent_run(const uint8_t *key, const uint8_t *id);
+
+#if ENCHIVE_OPTION_AGENT
+#include <poll.h>
+#include <unistd.h>
+#include <sys/un.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+
+/**
+ * Fill ADDR with a unix domain socket name for the agent.
+ */
+static int
+agent_addr(struct sockaddr_un *addr, const uint8_t *iv)
+{
+    char *dir = getenv("XDG_RUNTIME_DIR");
+    if (!dir) {
+        dir = getenv("TMPDIR");
+        if (!dir)
+            dir = "/tmp";
+    }
+
+    addr->sun_family = AF_UNIX;
+    if (strlen(dir) + 1 + 16 + 1 > sizeof(addr->sun_path)) {
+        warning("agent socket path too long -- %s", dir);
+        return 0;
+    } else {
+        sprintf(addr->sun_path, "%s/%02x%02x%02x%02x%02x%02x%02x%02x", dir,
+                iv[0], iv[1], iv[2], iv[3], iv[4], iv[5], iv[6], iv[7]);
+        return 1;
+    }
+}
+
+static int
+agent_read(uint8_t *key, const uint8_t *iv)
+{
+    int success;
+    struct sockaddr_un addr;
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (!agent_addr(&addr, iv)) {
+        close(fd);
+        return 0;
+    }
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr))) {
+        close(fd);
+        return 0;
+    }
+    success = read(fd, key, 32) == 32;
+    close(fd);
+    return success;
+}
+
+static int
+agent_run(const uint8_t *key, const uint8_t *iv)
+{
+    struct pollfd pfd = {-1, POLLIN, 0};
+    struct sockaddr_un addr;
+    pid_t pid;
+
+    pfd.fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (pfd.fd == -1) {
+        warning("could not create agent socket");
+        return 0;
+    }
+
+    if (!agent_addr(&addr, iv))
+        return 0;
+
+    pid = fork();
+    if (pid == -1) {
