@@ -340,3 +340,80 @@ dir_exists(const char *path)
     struct stat info;
     return !stat(path, &info) && S_ISDIR(info.st_mode);
 }
+
+/* Use $XDG_CONFIG_HOME/enchive, or $HOME/.config/enchive. */
+static char *
+storage_directory(char *file)
+{
+    static const char enchive[] = "/enchive/";
+    static const char config[] = "/.config";
+    char *xdg_config_home = getenv("XDG_CONFIG_HOME");
+    char *path, *s;
+
+    if (!xdg_config_home) {
+        char *home = getenv("HOME");
+        if (!home)
+            fatal("no $HOME or $XDG_CONFIG_HOME, giving up");
+        if (home[0] != '/')
+            fatal("$HOME is not absolute");
+        path = joinstr(4, home, config, enchive, file);
+    } else {
+        if (xdg_config_home[0] != '/')
+            fatal("$XDG_CONFIG_HOME is not absolute");
+        path = joinstr(3, xdg_config_home, enchive, file);
+    }
+
+    s = strchr(path + 1, '/');
+    while (s) {
+        *s = 0;
+        if (dir_exists(path) || !mkdir(path, 0700)) {
+            DIR *dir = opendir(path);
+            if (dir)
+                closedir(dir);
+            else
+                fatal("opendir(%s) -- %s", path, strerror(errno));
+        } else {
+            fatal("mkdir(%s) -- %s", path, strerror(errno));
+        }
+        *s = '/';
+        s = strchr(s + 1, '/');
+    }
+
+    return path;
+}
+
+#elif defined(_WIN32)
+#include <windows.h>
+
+/* Use %APPDATA% */
+static char *
+storage_directory(char *file)
+{
+    char *parent;
+    static const char enchive[] = "\\enchive\\";
+    char *appdata = getenv("APPDATA");
+    if (!appdata)
+        fatal("$APPDATA is unset");
+
+    parent = joinstr(2, appdata, enchive);
+    if (!CreateDirectory(parent, 0)) {
+        if (GetLastError() == ERROR_PATH_NOT_FOUND) {
+            fatal("$APPDATA directory doesn't exist");
+        } else { /* ERROR_ALREADY_EXISTS */
+            DWORD attr = GetFileAttributes(parent);
+            if ((attr == INVALID_FILE_ATTRIBUTES) ||
+                !(attr & FILE_ATTRIBUTE_DIRECTORY))
+                fatal("%s is not a directory", parent);
+        }
+    }
+    free(parent);
+
+    return joinstr(3, appdata, enchive, file);
+}
+
+#endif /* _WIN32 */
+
+/**
+ * Read a passphrase directly from the keyboard without echo.
+ */
+static void get_passphrase(char *buf, size_t len, char *prompt);
