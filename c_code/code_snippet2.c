@@ -250,3 +250,93 @@ agent_run(const uint8_t *key, const uint8_t *iv)
 
     pid = fork();
     if (pid == -1) {
+        warning("could not fork() agent -- %s", strerror(errno));
+        return 0;
+    } else if (pid != 0) {
+        return 1;
+    }
+    close(0);
+    close(1);
+
+    umask(~(S_IRUSR | S_IWUSR));
+
+    if (unlink(addr.sun_path))
+        if (errno != ENOENT)
+            fatal("failed to remove existing socket -- %s", strerror(errno));
+
+    if (bind(pfd.fd, (struct sockaddr *)&addr, sizeof(addr))) {
+        if (errno != EADDRINUSE)
+            warning("could not bind agent socket %s -- %s",
+                    addr.sun_path, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(pfd.fd, SOMAXCONN)) {
+        if (errno != EADDRINUSE)
+            fatal("could not listen on agent socket -- %s", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    close(2);
+    for (;;) {
+        int cfd;
+        int r = poll(&pfd, 1, global_agent_timeout * 1000);
+        if (r < 0) {
+            unlink(addr.sun_path);
+            fatal("agent poll failed -- %s", strerror(errno));
+        }
+        if (r == 0) {
+            unlink(addr.sun_path);
+            fputs("info: agent timeout\n", stderr);
+            close(pfd.fd);
+            break;
+        }
+        cfd = accept(pfd.fd, 0, 0);
+        if (cfd != -1) {
+            if (write(cfd, key, 32) != 32)
+                warning("agent write failed");
+            close(cfd);
+        }
+    }
+    exit(EXIT_SUCCESS);
+}
+
+#else
+static int
+agent_read(uint8_t *key, const uint8_t *id)
+{
+    (void)key;
+    (void)id;
+    return 0;
+}
+
+static int
+agent_run(const uint8_t *key, const uint8_t *id)
+{
+    (void)key;
+    (void)id;
+    return 0;
+}
+#endif
+
+/**
+ * Prepend the system user config directory to a filename, creating
+ * the directory if necessary. Calls fatal() on any error.
+ */
+static char *storage_directory(char *file);
+
+#if defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
+#include <dirent.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+/**
+ * Return non-zero if path exists and is a directory.
+ */
+static int
+dir_exists(const char *path)
+{
+    struct stat info;
+    return !stat(path, &info) && S_ISDIR(info.st_mode);
+}
