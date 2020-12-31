@@ -505,3 +505,83 @@ invoke_pinentry(char *buf, size_t len, char *prompt)
             fatal("pinentry read() -- %s", strerror(errno));
         if (strncmp(line, "OK", 2) != 0)
             fatal("pinentry protocol failure");
+
+        if (fprintf(pfi, "GETPIN\n") < 0 || fflush(pfi) < 0)
+            fatal("pinentry write() -- %s", strerror(errno));
+
+        if (!fgets(line, sizeof(line), pfo))
+            fatal("pinentry read() -- %s", strerror(errno));
+        if (strncmp(line, "ERR ", 4) == 0)
+            fatal("passphrase entry canceled");
+        else if (strncmp(line, "OK", 2) == 0)
+            buf[0] = 0;
+        else if (strncmp(line, "D ", 2) == 0)
+            pinentry_decode(buf, len, line + 2);
+        else
+            fatal("pinentry protocol failure");
+
+        fclose(pfo);
+        fclose(pfi);
+    } else {
+        close(pin[1]);
+        close(pout[0]);
+        dup2(pin[0], STDIN_FILENO);
+        dup2(pout[1], STDOUT_FILENO);
+        if (execlp(pinentry_path, pinentry_path, (char *)0))
+            fatal("exec(\"%s\") failed -- %s",
+                  pinentry_path, strerror(errno));
+    }
+}
+
+static void
+get_passphrase(char *buf, size_t len, char *prompt)
+{
+    int tty;
+
+    if (pinentry_path) {
+        invoke_pinentry(buf, len, prompt);
+        return;
+    }
+
+    tty = open("/dev/tty", O_RDWR);
+    if (tty == -1) {
+        get_passphrase_dumb(buf, len, prompt);
+    } else {
+        char newline = '\n';
+        size_t i = 0;
+        struct termios old, new;
+        if (write(tty, prompt, strlen(prompt)) == -1)
+            fatal("error asking for passphrase");
+        tcgetattr(tty, &old);
+        new = old;
+        new.c_lflag &= ~ECHO;
+        tcsetattr(tty, TCSANOW, &new);
+        errno = 0;
+        while (i < len - 1 && read(tty, buf + i, 1) == 1) {
+            if (buf[i] == '\n' || buf[i] == '\r')
+                break;
+            i++;
+        }
+        buf[i] = 0;
+        tcsetattr(tty, TCSANOW, &old);
+        if (write(tty, &newline, 1) == -1)
+            fatal("error asking for passphrase");
+        close(tty);
+        if (errno)
+            fatal("could not read passphrase from /dev/tty");
+    }
+}
+
+#elif defined(_WIN32)
+#include <windows.h>
+
+static void
+get_passphrase(char *buf, size_t len, char *prompt)
+{
+    DWORD orig;
+    HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+    if (!GetConsoleMode(in, &orig)) {
+        get_passphrase_dumb(buf, len, prompt);
+    } else {
+        size_t passlen;
+        SetConsoleMode(in, orig & ~ENABLE_ECHO_INPUT);
