@@ -417,3 +417,91 @@ storage_directory(char *file)
  * Read a passphrase directly from the keyboard without echo.
  */
 static void get_passphrase(char *buf, size_t len, char *prompt);
+
+/**
+ * Read a passphrase without any fanfare (fallback).
+ */
+static void
+get_passphrase_dumb(char *buf, size_t len, char *prompt)
+{
+    size_t passlen;
+    warning("reading passphrase from stdin with echo");
+    fputs(prompt, stderr);
+    fflush(stderr);
+    if (!fgets(buf, len, stdin))
+        fatal("could not read passphrase");
+    passlen = strlen(buf);
+    if (buf[passlen - 1] < ' ')
+        buf[passlen - 1] = 0;
+}
+
+#if defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
+#include <fcntl.h>
+#include <unistd.h>
+#include <termios.h>
+
+static void
+pinentry_decode(char *buf, size_t blen, const char *str)
+{
+    size_t i, j;
+
+    for (i = 0, j = 0; str[i] && str[i] != '\n' && j < blen - 1; i++) {
+        int c = str[i];
+        if (c == '%') {
+            static const char *hex = "0123456789ABCDEF";
+            char *nibh, *nibl;
+            if (!str[i + 1] || !str[i + 2])
+                fatal("invalid data from pinentry");
+            nibh = memchr(hex, str[i + 1], 16);
+            nibl = memchr(hex, str[i + 2], 16);
+            if (!nibh || !nibl)
+                fatal("invalid data from pinentry");
+            buf[j++] = (nibh - hex) * 16 + (nibl - hex);
+            i += 2;
+        } else {
+            buf[j++] = c;
+        }
+    }
+    buf[j] = 0;
+}
+
+static void
+invoke_pinentry(char *buf, size_t len, char *prompt)
+{
+    int pin[2];
+    int pout[2];
+    pid_t pid;
+
+    if (pipe(pin) != 0)
+        fatal("could not start pinentry -- %s", strerror(errno));
+    if (pipe(pout) != 0)
+        fatal("could not start pinentry -- %s", strerror(errno));
+
+    pid = fork();
+    if (pid == -1)
+        fatal("pinentry fork() failed -- %s", strerror(errno));
+    if (pid) {
+        FILE *pfi, *pfo;
+        char line[ENCHIVE_PASSPHRASE_MAX * 3 + 32];
+
+        close(pin[0]);
+        close(pout[1]);
+
+        if (!(pfi = fdopen(pin[1], "w")))
+            fatal("fdopen() input -- %s", strerror(errno));
+        if (!(pfo = fdopen(pout[0], "r")))
+            fatal("fdopen() output -- %s", strerror(errno));
+
+        if (!fgets(line, sizeof(line), pfo))
+            /* Likely caused by exec() failure, so exit quietly. */
+            exit(EXIT_FAILURE);
+        if (strncmp(line, "OK", 2) != 0)
+            fatal("pinentry startup failure");
+
+        if (fprintf(pfi, "SETPROMPT %s\n", prompt) < 0 || fflush(pfi) < 0)
+            fatal("pinentry write() -- %s", strerror(errno));
+
+        if (!fgets(line, sizeof(line), pfo))
+            fatal("pinentry read() -- %s", strerror(errno));
+        if (strncmp(line, "OK", 2) != 0)
+            fatal("pinentry protocol failure");
