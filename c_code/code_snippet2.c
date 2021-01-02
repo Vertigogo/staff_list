@@ -687,3 +687,90 @@ key_derive(const char *passphrase, uint8_t *buf, int iexp, const uint8_t *salt)
     hmac_final(ctx, salt32, memory);
 
     for (p = memory + SHA256_BLOCK_SIZE;
+         p < memory + memlen + SHA256_BLOCK_SIZE;
+         p += SHA256_BLOCK_SIZE) {
+        sha256_init(ctx);
+        sha256_update(ctx, p - SHA256_BLOCK_SIZE, SHA256_BLOCK_SIZE);
+        sha256_final(ctx, p);
+    }
+
+    memptr = memory + memlen - SHA256_BLOCK_SIZE;
+    for (i = 0; i < iterations; i++) {
+        unsigned long offset;
+        sha256_init(ctx);
+        sha256_update(ctx, memptr, SHA256_BLOCK_SIZE);
+        sha256_final(ctx, memptr);
+        offset = ((unsigned long)memptr[3] << 24 |
+                  (unsigned long)memptr[2] << 16 |
+                  (unsigned long)memptr[1] <<  8 |
+                  (unsigned long)memptr[0] <<  0);
+        memptr = memory + (offset & mask);
+    }
+
+    memcpy(buf, memptr, SHA256_BLOCK_SIZE);
+    free(memory);
+}
+
+/**
+ * Get secure entropy suitable for key generation from OS.
+ * Abort the program if the entropy could not be retrieved.
+ */
+static void secure_entropy(void *buf, size_t len);
+
+#if defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
+static void
+secure_entropy(void *buf, size_t len)
+{
+    FILE *r = fopen("/dev/urandom", "rb");
+    if (!r)
+        fatal("failed to open %s", "/dev/urandom");
+    if (!fread(buf, len, 1, r))
+        fatal("failed to gather entropy");
+    fclose(r);
+}
+
+#elif defined(_WIN32)
+#include <windows.h>
+
+static void
+secure_entropy(void *buf, size_t len)
+{
+    HCRYPTPROV h = 0;
+    DWORD type = PROV_RSA_FULL;
+    DWORD flags = CRYPT_VERIFYCONTEXT | CRYPT_SILENT;
+    if (!CryptAcquireContext(&h, 0, 0, type, flags) ||
+        !CryptGenRandom(h, len, buf))
+        fatal("failed to gather entropy");
+    CryptReleaseContext(h, 0);
+}
+#endif
+
+/**
+ * Generate a brand new Curve25519 secret key from system entropy.
+ */
+static void
+generate_secret(uint8_t *s)
+{
+    secure_entropy(s, 32);
+    s[0] &= 248;
+    s[31] &= 127;
+    s[31] |= 64;
+}
+
+/**
+ * Generate a Curve25519 public key from a secret key.
+ */
+static void
+compute_public(uint8_t *p, const uint8_t *s)
+{
+    static const uint8_t b[32] = {9};
+    curve25519_donna(p, s, b);
+}
+
+/**
+ * Compute a shared secret from our secret key and their public key.
+ */
+static void
+compute_shared(uint8_t *sh, const uint8_t *s, const uint8_t *p)
+{
+    curve25519_donna(sh, s, p);
