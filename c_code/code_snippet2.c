@@ -585,3 +585,105 @@ get_passphrase(char *buf, size_t len, char *prompt)
     } else {
         size_t passlen;
         SetConsoleMode(in, orig & ~ENABLE_ECHO_INPUT);
+        fputs(prompt, stderr);
+        if (!fgets(buf, len, stdin))
+            fatal("could not read passphrase");
+        fputc('\n', stderr);
+        passlen = strlen(buf);
+        if (buf[passlen - 1] < ' ')
+            buf[passlen - 1] = 0;
+    }
+}
+
+#else
+static void
+get_passphrase(char *buf, size_t len, char *prompt)
+{
+    get_passphrase_dumb(buf, len, prompt);
+}
+#endif
+
+/**
+ * Create/truncate a file with paranoid permissions using OS calls.
+ */
+static FILE *secure_creat(const char *file);
+
+#if defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
+#include <unistd.h>
+
+static FILE *
+secure_creat(const char *file)
+{
+    int fd = open(file, O_CREAT | O_WRONLY, 00600);
+    if (fd == -1)
+        return 0;
+    return fdopen(fd, "wb");
+}
+
+#else
+static FILE *
+secure_creat(const char *file)
+{
+    return fopen(file, "wb");
+}
+#endif
+
+/**
+ * Initialize a SHA-256 context for HMAC-SHA256.
+ * All message data will go into the resulting context.
+ */
+static void
+hmac_init(SHA256_CTX *ctx, const uint8_t *key)
+{
+    int i;
+    uint8_t pad[SHA256_BLOCK_SIZE];
+    sha256_init(ctx);
+    for (i = 0; i < SHA256_BLOCK_SIZE; i++)
+        pad[i] = key[i] ^ 0x36U;
+    sha256_update(ctx, pad, sizeof(pad));
+}
+
+/**
+ * Compute the final HMAC-SHA256 MAC.
+ * The key must be the same as used for initialization.
+ */
+static void
+hmac_final(SHA256_CTX *ctx, const uint8_t *key, uint8_t *hash)
+{
+    int i;
+    uint8_t pad[SHA256_BLOCK_SIZE];
+    sha256_final(ctx, hash);
+    sha256_init(ctx);
+    for (i = 0; i < SHA256_BLOCK_SIZE; i++)
+        pad[i] = key[i] ^ 0x5cU;
+    sha256_update(ctx, pad, sizeof(pad));
+    sha256_update(ctx, hash, SHA256_BLOCK_SIZE);
+    sha256_final(ctx, hash);
+}
+
+/**
+ * Derive a 32-byte key from null-terminated passphrase into buf.
+ * Optionally provide an 8-byte salt.
+ */
+static void
+key_derive(const char *passphrase, uint8_t *buf, int iexp, const uint8_t *salt)
+{
+    uint8_t salt32[SHA256_BLOCK_SIZE] = {0};
+    SHA256_CTX ctx[1];
+    unsigned long i;
+    unsigned long memlen = 1UL << iexp;
+    unsigned long mask = memlen - 1;
+    unsigned long iterations = 1UL << (iexp - 5);
+    uint8_t *memory, *memptr, *p;
+
+    memory = malloc(memlen + SHA256_BLOCK_SIZE);
+    if (!memory)
+        fatal("not enough memory for key derivation");
+
+    if (salt)
+        memcpy(salt32, salt, 8);
+    hmac_init(ctx, salt32);
+    sha256_update(ctx, (uint8_t *)passphrase, strlen(passphrase));
+    hmac_final(ctx, salt32, memory);
+
+    for (p = memory + SHA256_BLOCK_SIZE;
