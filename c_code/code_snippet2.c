@@ -862,3 +862,99 @@ symmetric_decrypt(FILE *in, FILE *out, const uint8_t *key, const uint8_t *iv)
         fatal("checksum mismatch!");
     if (fflush(out))
         fatal("error flushing to plaintext file -- %s", strerror(errno));
+
+}
+
+/**
+ * Return the default public key file.
+ */
+static char *
+default_pubfile(void)
+{
+    return storage_directory("enchive.pub");
+}
+
+/**
+ * Return the default secret key file.
+ */
+static char *
+default_secfile(void)
+{
+    return storage_directory("enchive.sec");
+}
+
+/**
+ * Dump the public key to a file, aborting on error.
+ */
+static void
+write_pubkey(char *file, uint8_t *key)
+{
+    FILE *f = fopen(file, "wb");
+    if (!f)
+        fatal("failed to open key file for writing '%s' -- %s",
+              file, strerror(errno));
+    cleanup_register(f, file);
+    if (!fwrite(key, 32, 1, f))
+        fatal("failed to write key file '%s'", file);
+    cleanup_closed(f);
+    if (fclose(f))
+        fatal("failed to flush key file '%s' -- %s", file, strerror(errno));
+}
+
+/* Layout of secret key file */
+#define SECFILE_IV            0
+#define SECFILE_ITERATIONS    8
+#define SECFILE_VERSION       9
+#define SECFILE_PROTECT_HASH  12
+#define SECFILE_SECKEY        32
+
+/**
+ * Write the secret key to a file, encrypting it if necessary.
+ */
+static void
+write_seckey(char *file, const uint8_t *seckey, int iexp)
+{
+    FILE *secfile;
+    chacha_ctx cha[1];
+    SHA256_CTX sha[1];
+    uint8_t buf[8 + 1 + 3 + 20 + 32] = {0}; /* entire file contents */
+    uint8_t protect[32];
+
+    uint8_t *buf_iv           = buf + SECFILE_IV;
+    uint8_t *buf_iterations   = buf + SECFILE_ITERATIONS;
+    uint8_t *buf_version      = buf + SECFILE_VERSION;
+    uint8_t *buf_protect_hash = buf + SECFILE_PROTECT_HASH;
+    uint8_t *buf_seckey       = buf + SECFILE_SECKEY;
+
+    buf_version[0] = ENCHIVE_FORMAT_VERSION;
+
+    if (iexp) {
+        /* Prompt for a passphrase. */
+        char pass[2][ENCHIVE_PASSPHRASE_MAX];
+        get_passphrase(pass[0], sizeof(pass[0]),
+                       "protection passphrase (empty for none): ");
+        if (!pass[0][0]) {
+            /* Nevermind. */
+            iexp = 0;
+        }  else {
+            get_passphrase(pass[1], sizeof(pass[0]),
+                           "protection passphrase (repeat): ");
+            if (strcmp(pass[0], pass[1]) != 0)
+                fatal("protection passphrases don't match");
+
+            /* Generate an IV to double as salt. */
+            secure_entropy(buf_iv, 8);
+
+            key_derive(pass[0], protect, iexp, buf_iv);
+            buf_iterations[0] = iexp;
+
+            sha256_init(sha);
+            sha256_update(sha, protect, sizeof(protect));
+            sha256_final(sha, buf_protect_hash);
+        }
+    }
+
+    if (iexp) {
+        /* Encrypt using key derived from passphrase. */
+        chacha_keysetup(cha, protect, 256);
+        chacha_ivsetup(cha, buf_iv);
