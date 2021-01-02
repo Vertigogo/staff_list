@@ -774,3 +774,91 @@ static void
 compute_shared(uint8_t *sh, const uint8_t *s, const uint8_t *p)
 {
     curve25519_donna(sh, s, p);
+}
+
+/**
+ * Encrypt from file to file using key/iv, aborting on any error.
+ */
+static void
+symmetric_encrypt(FILE *in, FILE *out, const uint8_t *key, const uint8_t *iv)
+{
+    static uint8_t buffer[2][CHACHA_BLOCKLENGTH * 1024];
+    uint8_t mac[SHA256_BLOCK_SIZE];
+    SHA256_CTX hmac[1];
+    chacha_ctx ctx[1];
+
+    chacha_keysetup(ctx, key, 256);
+    chacha_ivsetup(ctx, iv);
+    hmac_init(hmac, key);
+
+    for (;;) {
+        size_t z = fread(buffer[0], 1, sizeof(buffer[0]), in);
+        if (!z) {
+            if (ferror(in))
+                fatal("error reading plaintext file");
+            break;
+        }
+        sha256_update(hmac, buffer[0], z);
+        chacha_encrypt(ctx, buffer[0], buffer[1], z);
+        if (!fwrite(buffer[1], z, 1, out))
+            fatal("error writing ciphertext file");
+        if (z < sizeof(buffer[0]))
+            break;
+    }
+
+    hmac_final(hmac, key, mac);
+
+    if (!fwrite(mac, sizeof(mac), 1, out))
+        fatal("error writing checksum to ciphertext file");
+    if (fflush(out))
+        fatal("error flushing to ciphertext file -- %s", strerror(errno));
+}
+
+/**
+ * Decrypt from file to file using key/iv, aborting on any error.
+ */
+static void
+symmetric_decrypt(FILE *in, FILE *out, const uint8_t *key, const uint8_t *iv)
+{
+    static uint8_t buffer[2][CHACHA_BLOCKLENGTH * 1024 + SHA256_BLOCK_SIZE];
+    uint8_t mac[SHA256_BLOCK_SIZE];
+    SHA256_CTX hmac[1];
+    chacha_ctx ctx[1];
+
+    chacha_keysetup(ctx, key, 256);
+    chacha_ivsetup(ctx, iv);
+    hmac_init(hmac, key);
+
+    /* Always keep SHA256_BLOCK_SIZE bytes in the buffer. */
+    if (!(fread(buffer[0], SHA256_BLOCK_SIZE, 1, in))) {
+        if (ferror(in))
+            fatal("cannot read ciphertext file");
+        else
+            fatal("ciphertext file too short");
+    }
+
+    for (;;) {
+        uint8_t *p = buffer[0] + SHA256_BLOCK_SIZE;
+        size_t z = fread(p, 1, sizeof(buffer[0]) - SHA256_BLOCK_SIZE, in);
+        if (!z) {
+            if (ferror(in))
+                fatal("error reading ciphertext file");
+            break;
+        }
+        chacha_encrypt(ctx, buffer[0], buffer[1], z);
+        sha256_update(hmac, buffer[1], z);
+        if (!fwrite(buffer[1], z, 1, out))
+            fatal("error writing plaintext file");
+
+        /* Move last SHA256_BLOCK_SIZE bytes to the front. */
+        memmove(buffer[0], buffer[0] + z, SHA256_BLOCK_SIZE);
+
+        if (z < sizeof(buffer[0]) - SHA256_BLOCK_SIZE)
+            break;
+    }
+
+    hmac_final(hmac, key, mac);
+    if (memcmp(buffer[0], mac, sizeof(mac)) != 0)
+        fatal("checksum mismatch!");
+    if (fflush(out))
+        fatal("error flushing to plaintext file -- %s", strerror(errno));
