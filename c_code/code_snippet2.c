@@ -958,3 +958,78 @@ write_seckey(char *file, const uint8_t *seckey, int iexp)
         /* Encrypt using key derived from passphrase. */
         chacha_keysetup(cha, protect, 256);
         chacha_ivsetup(cha, buf_iv);
+        chacha_encrypt(cha, seckey, buf_seckey, 32);
+    } else {
+        /* Copy key to output buffer. */
+        memcpy(buf_seckey, seckey, 32);
+    }
+
+    secfile = secure_creat(file);
+    if (!secfile)
+        fatal("failed to open key file for writing '%s'", file);
+    cleanup_register(secfile, file);
+    if (!fwrite(buf, sizeof(buf), 1, secfile))
+        fatal("failed to write key file '%s'", file);
+    cleanup_closed(secfile);
+    if (fclose(secfile))
+        fatal("failed to flush key file '%s' -- %s", file, strerror(errno));
+}
+
+/**
+ * Load the public key from the file.
+ */
+static void
+load_pubkey(const char *file, uint8_t *key)
+{
+    FILE *f = fopen(file, "rb");
+    if (!f)
+        fatal("failed to open key file for reading '%s' -- %s",
+              file, strerror(errno));
+    if (!fread(key, 32, 1, f))
+        fatal("failed to read key file '%s'", file);
+    fclose(f);
+}
+
+/**
+ * Attempt to load and decrypt the secret key stored in a file.
+ *
+ * If the key is encrypted, attempt to query a key agent. If that
+ * fails (no agent, bad key) prompt the user for a passphrase. If that
+ * fails (wrong passphrase), abort the program.
+ *
+ * If "global_agent_timeout" is non-zero, start a key agent if
+ * necessary.
+ */
+static void
+load_seckey(const char *file, uint8_t *seckey)
+{
+    FILE *secfile;
+    chacha_ctx cha[1];
+    SHA256_CTX sha[1];
+    uint8_t buf[8 + 4 + 20 + 32];            /* entire key file contents */
+    uint8_t protect[32];                     /* protection key */
+    uint8_t protect_hash[SHA256_BLOCK_SIZE]; /* hash of protection key */
+    int iexp;
+    int version;
+
+    uint8_t *buf_iv           = buf + SECFILE_IV;
+    uint8_t *buf_iterations   = buf + SECFILE_ITERATIONS;
+    uint8_t *buf_version      = buf + SECFILE_VERSION;
+    uint8_t *buf_protect_hash = buf + SECFILE_PROTECT_HASH;
+    uint8_t *buf_seckey       = buf + SECFILE_SECKEY;
+
+    /* Read the entire file into buf. */
+    secfile = fopen(file, "rb");
+    if (!secfile)
+        fatal("failed to open key file for reading '%s' -- %s",
+              file, strerror(errno));
+    if (!fread(buf, sizeof(buf), 1, secfile))
+        fatal("failed to read key file -- %s", file);
+    fclose(secfile);
+
+    version = buf_version[0];
+    if (version != ENCHIVE_FORMAT_VERSION)
+        fatal("secret key version mismatch -- expected %d, got %d",
+              ENCHIVE_FORMAT_VERSION, version);
+
+    iexp = buf_iterations[0];
