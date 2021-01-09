@@ -1129,3 +1129,77 @@ static enum command
 parse_command(char *command)
 {
     int found = COMMAND_UNKNOWN;
+    size_t len = strlen(command);
+    int ncommands = sizeof(command_names) / sizeof(*command_names);
+    int i;
+    for (i = 0; i < ncommands; i++) {
+        if (strncmp(command, command_names[i], len) == 0) {
+            if (found >= 0)
+                return COMMAND_AMBIGUOUS;
+            found = i;
+        }
+    }
+    return found;
+}
+
+static void
+command_keygen(struct optparse *options)
+{
+    static const struct optparse_long keygen[] = {
+        {"derive",      'd', OPTPARSE_OPTIONAL},
+        {"edit"  ,      'e', OPTPARSE_NONE},
+        {"force",       'f', OPTPARSE_NONE},
+        {"fingerprint", 'i', OPTPARSE_NONE},
+        {"iterations",  'k', OPTPARSE_REQUIRED},
+        {"plain",       'u', OPTPARSE_NONE},
+        {"repeats",     'r', OPTPARSE_REQUIRED},
+        {0, 0, 0}
+    };
+
+    char *pubfile = dupstr(global_pubkey);
+    char *secfile = dupstr(global_seckey);
+    int pubfile_exists;
+    int secfile_exists;
+    uint8_t public[32];
+    uint8_t secret[32];
+    int clobber = 0;
+    int derive = 0;
+    int edit = 0;
+    int protect = 1;
+    int fingerprint = 0;
+    int repeats = 1;
+    int key_derive_iterations = ENCHIVE_KEY_DERIVE_ITERATIONS;
+    int seckey_derive_iterations = ENCHIVE_SECKEY_DERIVE_ITERATIONS;
+
+    int option;
+    while ((option = optparse_long(options, keygen, 0)) != -1) {
+        switch (option) {
+            case 'd': {
+                char *p;
+                char *arg = options->optarg;
+                derive = 1;
+                if (arg) {
+                    long n;
+                    errno = 0;
+                    n = strtol(arg, &p, 10);
+                    if (errno || *p)
+                        fatal("invalid argument -- %s", arg);
+                    if (n < 5 || n > 31)
+                        fatal("--derive argument must be 5 <= n <= 31 -- %s",
+                              arg);
+                    seckey_derive_iterations = n;
+                }
+            } break;
+            case 'e':
+                edit = 1;
+                break;
+            case 'f':
+                clobber = 1;
+                break;
+            case 'i':
+                fingerprint = 1;
+                break;
+            case 'k': {
+                char *p;
+                char *arg = options->optarg;
+                long n;
