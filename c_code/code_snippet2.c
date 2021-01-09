@@ -1203,3 +1203,70 @@ command_keygen(struct optparse *options)
                 char *p;
                 char *arg = options->optarg;
                 long n;
+                errno = 0;
+                n = strtol(arg, &p, 10);
+                if (errno || *p)
+                    fatal("invalid argument -- %s", arg);
+                if (n < 5 || n > 31)
+                    fatal("--iterations argument must be 5 <= n <= 31 -- %s",
+                          arg);
+                key_derive_iterations = n;
+            } break;
+            case 'r': {
+                char *p;
+                char *arg = options->optarg;
+                long n;
+                errno = 0;
+                n = strtol(arg, &p, 10);
+                if (errno || *p || n < 0 || n >= 256)
+                    fatal("invalid --repeats (-r) -- %s", arg);
+                repeats = n;
+            } break;
+            case 'u':
+                protect = 0;
+                break;
+            default:
+                fatal("%s", options->errmsg);
+        }
+    }
+
+    if (edit && derive)
+        fatal("--edit and --derive are mutually exclusive");
+
+    if (!pubfile)
+        pubfile = default_pubfile();
+    pubfile_exists = file_exists(pubfile);
+    if (!secfile)
+        secfile = default_secfile();
+    secfile_exists = file_exists(secfile);
+
+    if (!edit && !clobber) {
+        if (pubfile_exists)
+            fatal("operation would clobber %s", pubfile);
+        if (secfile_exists)
+            fatal("operation would clobber %s", secfile);
+    }
+
+    if (edit) {
+        if (!secfile_exists)
+            fatal("cannot edit non-existing file %s", secfile);
+        load_seckey(secfile, secret);
+    } else if (derive) {
+        /* Generate secret key from passphrase. */
+        char pass[2][ENCHIVE_PASSPHRASE_MAX];
+        get_passphrase(pass[0], sizeof(pass[0]),
+                       "secret key passphrase: ");
+        while (repeats--) {
+            get_passphrase(pass[1], sizeof(pass[0]),
+                           "secret key passphrase (repeat): ");
+            if (strcmp(pass[0], pass[1]) != 0)
+                fatal("secret key passphrases don't match");
+        }
+        key_derive(pass[0], secret, seckey_derive_iterations, 0);
+        secret[0] &= 248;
+        secret[31] &= 127;
+        secret[31] |= 64;
+    } else {
+        /* Generate secret key from entropy. */
+        generate_secret(secret);
+    }
