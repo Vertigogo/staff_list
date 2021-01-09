@@ -1033,3 +1033,99 @@ load_seckey(const char *file, uint8_t *seckey)
               ENCHIVE_FORMAT_VERSION, version);
 
     iexp = buf_iterations[0];
+    if (iexp) {
+        /* Secret key is encrypted. */
+        int agent_success = agent_read(protect, buf_iv);
+        if (agent_success) {
+            /* Check validity of agent key. */
+            sha256_init(sha);
+            sha256_update(sha, protect, 32);
+            sha256_final(sha, protect_hash);
+            agent_success = !memcmp(protect_hash, buf_protect_hash, 20);
+        }
+
+        if (!agent_success) {
+            /* Ask user for passphrase. */
+            char pass[ENCHIVE_PASSPHRASE_MAX];
+            get_passphrase(pass, sizeof(pass), "passphrase: ");
+            key_derive(pass, protect, iexp, buf_iv);
+
+            /* Validate passphrase. */
+            sha256_init(sha);
+            sha256_update(sha, protect, sizeof(protect));
+            sha256_final(sha, protect_hash);
+            if (memcmp(protect_hash, buf_protect_hash, 20) != 0)
+                fatal("wrong passphrase");
+        }
+
+        /* We have the correct protection key. Start the agent? */
+        if (!agent_success && global_agent_timeout)
+            agent_run(protect, buf_iv);
+
+        /* Decrypt the key into the output. */
+        chacha_keysetup(cha, protect, 256);
+        chacha_ivsetup(cha, buf_iv);
+        chacha_encrypt(cha, buf_seckey, seckey, 32);
+    } else {
+        /* Key is unencrypted, copy into output. */
+        memcpy(seckey, buf_seckey, 32);
+    }
+}
+
+/**
+ * Return 1 if file exists, or 0 if it doesn't.
+ */
+static int
+file_exists(char *filename)
+{
+    FILE *f = fopen(filename, "r");
+    if (f) {
+        fclose(f);
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Print a nice fingerprint of a key.
+ */
+static void
+print_fingerprint(const uint8_t *key)
+{
+    int i;
+    uint8_t hash[32];
+    SHA256_CTX sha[1];
+
+    sha256_init(sha);
+    sha256_update(sha, key, 32);
+    sha256_final(sha, hash);
+    for (i = 0; i < 16; i += 4) {
+        unsigned long chunk =
+            ((unsigned long)hash[i + 0] << 24) |
+            ((unsigned long)hash[i + 1] << 16) |
+            ((unsigned long)hash[i + 2] <<  8) |
+            ((unsigned long)hash[i + 3] <<  0);
+        printf("%s%08lx", i ? "-" : "", chunk);
+    }
+}
+
+enum command {
+    COMMAND_UNKNOWN = -2,
+    COMMAND_AMBIGUOUS = -1,
+    COMMAND_KEYGEN,
+    COMMAND_FINGERPRINT,
+    COMMAND_ARCHIVE,
+    COMMAND_EXTRACT
+};
+
+static const char command_names[][12] = {
+    "keygen", "fingerprint", "archive", "extract"
+};
+
+/**
+ * Attempt to unambiguously parse the user's command into an enum.
+ */
+static enum command
+parse_command(char *command)
+{
+    int found = COMMAND_UNKNOWN;
