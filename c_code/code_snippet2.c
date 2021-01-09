@@ -1270,3 +1270,92 @@ command_keygen(struct optparse *options)
         /* Generate secret key from entropy. */
         generate_secret(secret);
     }
+
+    compute_public(public, secret);
+
+    if (fingerprint) {
+        fputs("keyid: ", stdout);
+        print_fingerprint(public);
+        putchar('\n');
+    }
+
+    write_seckey(secfile, secret, protect ? key_derive_iterations : 0);
+    write_pubkey(pubfile, public);
+}
+
+static void
+command_fingerprint(struct optparse *options)
+{
+    static const struct optparse_long fingerprint[] = {
+        {0, 0, 0}
+    };
+
+    char *pubfile = dupstr(global_pubkey);
+    uint8_t public[32];
+
+    int option;
+    while ((option = optparse_long(options, fingerprint, 0)) != -1) {
+        switch (option) {
+            default:
+                fatal("%s", options->errmsg);
+        }
+    }
+
+    if (!pubfile)
+        pubfile = default_pubfile();
+    load_pubkey(pubfile, public);
+    free(pubfile);
+
+    print_fingerprint(public);
+    putchar('\n');
+}
+
+static void
+command_archive(struct optparse *options)
+{
+    static const struct optparse_long archive[] = {
+        {"delete", 'd', OPTPARSE_NONE},
+        {0, 0, 0}
+    };
+
+    /* Options */
+    char *infile;
+    char *outfile;
+    FILE *in = stdin;
+    FILE *out = stdout;
+    char *pubfile = dupstr(global_pubkey);
+    int delete = 0;
+
+    /* Workspace */
+    uint8_t public[32];
+    uint8_t esecret[32];
+    uint8_t epublic[32];
+    uint8_t shared[32];
+    uint8_t iv[SHA256_BLOCK_SIZE];
+    SHA256_CTX sha[1];
+
+    int option;
+    while ((option = optparse_long(options, archive, 0)) != -1) {
+        switch (option) {
+            case 'd':
+                delete = 1;
+                break;
+            default:
+                fatal("%s", options->errmsg);
+        }
+    }
+
+    if (!pubfile)
+        pubfile = default_pubfile();
+    load_pubkey(pubfile, public);
+    free(pubfile);
+
+    infile = optparse_arg(options);
+    if (infile) {
+        in = fopen(infile, "rb");
+        if (!in)
+            fatal("could not open input file '%s' -- %s",
+                  infile, strerror(errno));
+    }
+
+    outfile = dupstr(optparse_arg(options));
