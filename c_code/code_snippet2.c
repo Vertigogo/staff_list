@@ -1433,3 +1433,114 @@ command_extract(struct optparse *options)
                 fatal("%s", options->errmsg);
         }
     }
+
+    if (!secfile)
+        secfile = default_secfile();
+    load_seckey(secfile, secret);
+    free(secfile);
+
+    infile = optparse_arg(options);
+    if (infile) {
+        in = fopen(infile, "rb");
+        if (!in)
+            fatal("could not open input file '%s' -- %s",
+                  infile, strerror(errno));
+    }
+
+    outfile = dupstr(optparse_arg(options));
+    if (!outfile && infile) {
+        /* Generate an output filename. */
+        size_t slen = sizeof(enchive_suffix) - 1;
+        size_t len = strlen(infile);
+        if (len <= slen || strcmp(enchive_suffix, infile + len - slen) != 0)
+            fatal("could not determine output filename from %s", infile);
+        outfile = dupstr(infile);
+        outfile[len - slen] = 0;
+    }
+    if (outfile) {
+        out = fopen(outfile, "wb");
+        if (!out)
+            fatal("could not open output file '%s' -- %s",
+                  infile, strerror(errno));
+        cleanup_register(out, outfile);
+    }
+
+    if (!(fread(iv, sizeof(iv), 1, in)))
+        fatal("failed to read IV from archive");
+    if (!(fread(epublic, sizeof(epublic), 1, in)))
+        fatal("failed to read ephemeral key from archive");
+    compute_shared(shared, secret, epublic);
+
+    /* Validate key before processing the file. */
+    sha256_init(sha);
+    sha256_update(sha, shared, sizeof(shared));
+    sha256_final(sha, check_iv);
+    check_iv[0] += (unsigned)ENCHIVE_FORMAT_VERSION;
+    if (memcmp(iv, check_iv, sizeof(iv)) != 0)
+        fatal("invalid master key or format");
+
+    symmetric_decrypt(in, out, shared, iv);
+
+    if (in != stdin)
+        fclose(in);
+    if (out != stdout) {
+        cleanup_closed(out);
+        fclose(out); /* already flushed */
+    }
+
+    if (delete && infile)
+        remove(infile);
+}
+
+/**
+ * Write a NULL-terminated array of strings with a newline after each.
+ */
+static void
+multiputs(const char **s, FILE *f)
+{
+    while (*s) {
+        fputs(*s++, f);
+        fputc('\n', f);
+    }
+}
+
+static void
+print_usage(FILE *f)
+{
+    multiputs(docs_usage, f);
+}
+
+static void
+print_version(void)
+{
+    puts("enchive " STR(ENCHIVE_VERSION));
+}
+
+int
+main(int argc, char **argv)
+{
+    static const struct optparse_long global[] = {
+#if ENCHIVE_OPTION_AGENT
+        {"agent",         'a', OPTPARSE_OPTIONAL},
+        {"no-agent",      'A', OPTPARSE_NONE},
+#endif
+        {"pinentry",      'e', OPTPARSE_OPTIONAL},
+        {"pubkey",        'p', OPTPARSE_REQUIRED},
+        {"seckey",        's', OPTPARSE_REQUIRED},
+        {"version",       'V', OPTPARSE_NONE},
+        {"help",          'h', OPTPARSE_NONE},
+        {0, 0, 0}
+    };
+
+    int option;
+    char *command;
+    struct optparse options[1];
+    optparse_init(options, argv);
+    options->permute = 0;
+    (void)argc;
+
+    while ((option = optparse_long(options, global, 0)) != -1) {
+        switch (option) {
+#if ENCHIVE_OPTION_AGENT
+            case 'a':
+                if (options->optarg) {
