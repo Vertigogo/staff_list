@@ -1544,3 +1544,73 @@ main(int argc, char **argv)
 #if ENCHIVE_OPTION_AGENT
             case 'a':
                 if (options->optarg) {
+                    char *arg = options->optarg;
+                    char *endptr;
+                    errno = 0;
+                    global_agent_timeout = strtol(arg, &endptr, 10);
+                    if (*endptr || errno)
+                        fatal("invalid --agent argument -- %s", arg);
+                } else
+                    global_agent_timeout = ENCHIVE_AGENT_TIMEOUT;
+                break;
+            case 'A':
+                global_agent_timeout = 0;
+                break;
+#endif
+            case 'e':
+                if (options->optarg)
+                    pinentry_path = options->optarg;
+                else
+                    pinentry_path = STR(ENCHIVE_PINENTRY_DEFAULT);
+                break;
+            case 'p':
+                global_pubkey = options->optarg;
+                break;
+            case 's':
+                global_seckey = options->optarg;
+                break;
+            case 'h':
+                print_usage(stdout);
+                exit(EXIT_SUCCESS);
+                break;
+            case 'V':
+                print_version();
+                exit(EXIT_SUCCESS);
+                break;
+            default:
+                fatal("%s", options->errmsg);
+        }
+    }
+
+    command = optparse_arg(options);
+    options->permute = 1;
+    if (!command) {
+        fprintf(stderr, "enchive: missing command\n");
+        print_usage(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    switch (parse_command(command)) {
+        case COMMAND_UNKNOWN:
+        case COMMAND_AMBIGUOUS:
+            fprintf(stderr, "enchive: unknown command, %s\n", command);
+            print_usage(stderr);
+            exit(EXIT_FAILURE);
+            break;
+        case COMMAND_KEYGEN:
+            command_keygen(options);
+            break;
+        case COMMAND_FINGERPRINT:
+            command_fingerprint(options);
+            break;
+        case COMMAND_ARCHIVE:
+            command_archive(options);
+            break;
+        case COMMAND_EXTRACT:
+            command_extract(options);
+            break;
+    }
+
+    cleanup_free();
+    return 0;
+}
