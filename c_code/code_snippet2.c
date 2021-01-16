@@ -1359,3 +1359,77 @@ command_archive(struct optparse *options)
     }
 
     outfile = dupstr(optparse_arg(options));
+    if (!outfile && infile) {
+        /* Generate an output filename. */
+        outfile = joinstr(2, infile, enchive_suffix);
+    }
+    if (outfile) {
+        out = fopen(outfile, "wb");
+        if (!out)
+            fatal("could not open output file '%s' -- %s",
+                  outfile, strerror(errno));
+        cleanup_register(out, outfile);
+    }
+
+    /* Generare ephemeral keypair. */
+    generate_secret(esecret);
+    compute_public(epublic, esecret);
+
+    /* Create shared secret between ephemeral key and master key. */
+    compute_shared(shared, esecret, public);
+    sha256_init(sha);
+    sha256_update(sha, shared, sizeof(shared));
+    sha256_final(sha, iv);
+    iv[0] += (unsigned)ENCHIVE_FORMAT_VERSION;
+    if (!fwrite(iv, 8, 1, out))
+        fatal("failed to write IV to archive");
+    if (!fwrite(epublic, sizeof(epublic), 1, out))
+        fatal("failed to write ephemeral key to archive");
+    symmetric_encrypt(in, out, shared, iv);
+
+    if (in != stdin)
+        fclose(in);
+    if (out != stdout) {
+        cleanup_closed(out);
+        fclose(out); /* already flushed */
+    }
+
+    if (delete && infile)
+        remove(infile);
+
+}
+
+static void
+command_extract(struct optparse *options)
+{
+    static const struct optparse_long extract[] = {
+        {"delete", 'd', OPTPARSE_NONE},
+        {0, 0, 0}
+    };
+
+    /* Options */
+    char *infile;
+    char *outfile;
+    FILE *in = stdin;
+    FILE *out = stdout;
+    char *secfile = dupstr(global_seckey);
+    int delete = 0;
+
+    /* Workspace */
+    SHA256_CTX sha[1];
+    uint8_t secret[32];
+    uint8_t epublic[32];
+    uint8_t shared[32];
+    uint8_t iv[8];
+    uint8_t check_iv[SHA256_BLOCK_SIZE];
+
+    int option;
+    while ((option = optparse_long(options, extract, 0)) != -1) {
+        switch (option) {
+            case 'd':
+                delete = 1;
+                break;
+            default:
+                fatal("%s", options->errmsg);
+        }
+    }
