@@ -347,3 +347,93 @@ static uint8_t Multiply(uint8_t x, uint8_t y)
 // Please use the references to gain more information.
 static void InvMixColumns(state_t* state)
 {
+  int i;
+  uint8_t a, b, c, d;
+  for (i = 0; i < 4; ++i)
+  {
+    a = (*state)[i][0];
+    b = (*state)[i][1];
+    c = (*state)[i][2];
+    d = (*state)[i][3];
+
+    (*state)[i][0] = Multiply(a, 0x0e) ^ Multiply(b, 0x0b) ^ Multiply(c, 0x0d) ^ Multiply(d, 0x09);
+    (*state)[i][1] = Multiply(a, 0x09) ^ Multiply(b, 0x0e) ^ Multiply(c, 0x0b) ^ Multiply(d, 0x0d);
+    (*state)[i][2] = Multiply(a, 0x0d) ^ Multiply(b, 0x09) ^ Multiply(c, 0x0e) ^ Multiply(d, 0x0b);
+    (*state)[i][3] = Multiply(a, 0x0b) ^ Multiply(b, 0x0d) ^ Multiply(c, 0x09) ^ Multiply(d, 0x0e);
+  }
+}
+
+
+// The SubBytes Function Substitutes the values in the
+// state matrix with values in an S-box.
+static void InvSubBytes(state_t* state)
+{
+  uint8_t i, j;
+  for (i = 0; i < 4; ++i)
+  {
+    for (j = 0; j < 4; ++j)
+    {
+      (*state)[j][i] = getSBoxInvert((*state)[j][i]);
+    }
+  }
+}
+
+static void InvShiftRows(state_t* state)
+{
+  uint8_t temp;
+
+  // Rotate first row 1 columns to right
+  temp = (*state)[3][1];
+  (*state)[3][1] = (*state)[2][1];
+  (*state)[2][1] = (*state)[1][1];
+  (*state)[1][1] = (*state)[0][1];
+  (*state)[0][1] = temp;
+
+  // Rotate second row 2 columns to right
+  temp = (*state)[0][2];
+  (*state)[0][2] = (*state)[2][2];
+  (*state)[2][2] = temp;
+
+  temp = (*state)[1][2];
+  (*state)[1][2] = (*state)[3][2];
+  (*state)[3][2] = temp;
+
+  // Rotate third row 3 columns to right
+  temp = (*state)[0][3];
+  (*state)[0][3] = (*state)[1][3];
+  (*state)[1][3] = (*state)[2][3];
+  (*state)[2][3] = (*state)[3][3];
+  (*state)[3][3] = temp;
+}
+#endif // #if (defined(CBC) && CBC == 1) || (defined(ECB) && ECB == 1)
+
+// Cipher is the main function that encrypts the PlainText.
+static void Cipher(state_t* state, const uint8_t* RoundKey)
+{
+  uint8_t round = 0;
+
+  // Add the First round key to the state before starting the rounds.
+  AddRoundKey(0, state, RoundKey);
+
+  // There will be Nr rounds.
+  // The first Nr-1 rounds are identical.
+  // These Nr rounds are executed in the loop below.
+  // Last one without MixColumns()
+  for (round = 1; ; ++round)
+  {
+    SubBytes(state);
+    ShiftRows(state);
+    if (round == Nr) {
+      break;
+    }
+    MixColumns(state);
+    AddRoundKey(round, state, RoundKey);
+  }
+  // Add round key to last round
+  AddRoundKey(Nr, state, RoundKey);
+}
+
+#if (defined(CBC) && CBC == 1) || (defined(ECB) && ECB == 1)
+static void InvCipher(state_t* state, const uint8_t* RoundKey)
+{
+  uint8_t round = 0;
