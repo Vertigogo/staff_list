@@ -437,3 +437,80 @@ static void Cipher(state_t* state, const uint8_t* RoundKey)
 static void InvCipher(state_t* state, const uint8_t* RoundKey)
 {
   uint8_t round = 0;
+
+  // Add the First round key to the state before starting the rounds.
+  AddRoundKey(Nr, state, RoundKey);
+
+  // There will be Nr rounds.
+  // The first Nr-1 rounds are identical.
+  // These Nr rounds are executed in the loop below.
+  // Last one without InvMixColumn()
+  for (round = (Nr - 1); ; --round)
+  {
+    InvShiftRows(state);
+    InvSubBytes(state);
+    AddRoundKey(round, state, RoundKey);
+    if (round == 0) {
+      break;
+    }
+    InvMixColumns(state);
+  }
+
+}
+#endif // #if (defined(CBC) && CBC == 1) || (defined(ECB) && ECB == 1)
+
+/*****************************************************************************/
+/* Public functions:                                                         */
+/*****************************************************************************/
+#if defined(ECB) && (ECB == 1)
+
+
+void AES_ECB_encrypt(const struct AES_ctx* ctx, uint8_t* buf)
+{
+  // The next function call encrypts the PlainText with the Key using AES algorithm.
+  Cipher((state_t*)buf, ctx->RoundKey);
+}
+
+void AES_ECB_decrypt(const struct AES_ctx* ctx, uint8_t* buf)
+{
+  // The next function call decrypts the PlainText with the Key using AES algorithm.
+  InvCipher((state_t*)buf, ctx->RoundKey);
+}
+
+
+#endif // #if defined(ECB) && (ECB == 1)
+
+
+
+
+
+#if defined(CBC) && (CBC == 1)
+
+
+static void XorWithIv(uint8_t* buf, const uint8_t* Iv)
+{
+  uint8_t i;
+  for (i = 0; i < AES_BLOCKLEN; ++i) // The block in AES is always 128bit no matter the key size
+  {
+    buf[i] ^= Iv[i];
+  }
+}
+
+void AES_CBC_encrypt_buffer(struct AES_ctx *ctx, uint8_t* buf, uint32_t length)
+{
+  uintptr_t i;
+  uint8_t *Iv = ctx->Iv;
+  for (i = 0; i < length; i += AES_BLOCKLEN)
+  {
+    XorWithIv(buf, Iv);
+    Cipher((state_t*)buf, ctx->RoundKey);
+    Iv = buf;
+    buf += AES_BLOCKLEN;
+  }
+  /* store Iv in ctx for next call */
+  memcpy(ctx->Iv, Iv, AES_BLOCKLEN);
+}
+
+void AES_CBC_decrypt_buffer(struct AES_ctx* ctx, uint8_t* buf,  uint32_t length)
+{
+  uintptr_t i;
