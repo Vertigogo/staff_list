@@ -107,3 +107,92 @@
 #  define PLATFORM_WINDOWS 0
 #  define PLATFORM_POSIX 1
 #endif
+
+/// Platform and arch specifics
+#if defined(_MSC_VER) && !defined(__clang__)
+#  ifndef FORCEINLINE
+#    define FORCEINLINE inline __forceinline
+#  endif
+#  define _Static_assert static_assert
+#else
+#  ifndef FORCEINLINE
+#    define FORCEINLINE inline __attribute__((__always_inline__))
+#  endif
+#endif
+#if PLATFORM_WINDOWS
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <Windows.h>
+#  if ENABLE_VALIDATE_ARGS
+#    include <Intsafe.h>
+#  endif
+#else
+#  include <unistd.h>
+#  include <stdio.h>
+#  include <stdlib.h>
+#  if defined(__APPLE__)
+#    include <mach/mach_vm.h>
+#    include <mach/vm_statistics.h>
+#    include <pthread.h>
+#  endif
+#  if defined(__HAIKU__)
+#    include <OS.h>
+#    include <pthread.h>
+#  endif
+#endif
+
+#include <stdint.h>
+#include <string.h>
+#include <errno.h>
+
+#if defined(_WIN32) && (!defined(BUILD_DYNAMIC_LINK) || !BUILD_DYNAMIC_LINK)
+#include <fibersapi.h>
+static DWORD fls_key;
+static void NTAPI
+_rpmalloc_thread_destructor(void* value) {
+	if (value)
+		rpmalloc_thread_finalize();
+}
+#endif
+
+#if PLATFORM_POSIX
+#  include <sys/mman.h>
+#  include <sched.h>
+#  ifdef __FreeBSD__
+#    include <sys/sysctl.h>
+#    define MAP_HUGETLB MAP_ALIGNED_SUPER
+#  endif
+#  ifndef MAP_UNINITIALIZED
+#    define MAP_UNINITIALIZED 0
+#  endif
+#endif
+#include <errno.h>
+
+#if ENABLE_ASSERTS
+#  undef NDEBUG
+#  if defined(_MSC_VER) && !defined(_DEBUG)
+#    define _DEBUG
+#  endif
+#  include <assert.h>
+#else
+#  undef  assert
+#  define assert(x) do {} while(0)
+#endif
+#if ENABLE_STATISTICS
+#  include <stdio.h>
+#endif
+
+//////
+///
+/// Atomic access abstraction (since MSVC does not do C11 yet)
+///
+//////
+
+#if defined(_MSC_VER) && !defined(__clang__)
+
+typedef volatile long      atomic32_t;
+typedef volatile long long atomic64_t;
+typedef volatile void*     atomicptr_t;
+
+static FORCEINLINE int32_t atomic_load32(atomic32_t* src) { return *src; }
