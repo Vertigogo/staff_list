@@ -284,3 +284,72 @@ static FORCEINLINE int     atomic_cas_ptr_acquire(atomicptr_t* dst, void* val, v
 //! Small granularity shift count
 #define SMALL_GRANULARITY_SHIFT   4
 //! Number of small block size classes
+#define SMALL_CLASS_COUNT         65
+//! Maximum size of a small block
+#define SMALL_SIZE_LIMIT          (SMALL_GRANULARITY * (SMALL_CLASS_COUNT - 1))
+//! Granularity of a medium allocation block
+#define MEDIUM_GRANULARITY        512
+//! Medium granularity shift count
+#define MEDIUM_GRANULARITY_SHIFT  9
+//! Number of medium block size classes
+#define MEDIUM_CLASS_COUNT        61
+//! Total number of small + medium size classes
+#define SIZE_CLASS_COUNT          (SMALL_CLASS_COUNT + MEDIUM_CLASS_COUNT)
+//! Number of large block size classes
+#define LARGE_CLASS_COUNT         32
+//! Maximum size of a medium block
+#define MEDIUM_SIZE_LIMIT         (SMALL_SIZE_LIMIT + (MEDIUM_GRANULARITY * MEDIUM_CLASS_COUNT))
+//! Maximum size of a large block
+#define LARGE_SIZE_LIMIT          ((LARGE_CLASS_COUNT * _memory_span_size) - SPAN_HEADER_SIZE)
+//! ABA protection size in orhpan heap list (also becomes limit of smallest page size)
+#define HEAP_ORPHAN_ABA_SIZE      512
+//! Size of a span header (must be a multiple of SMALL_GRANULARITY and a power of two)
+#define SPAN_HEADER_SIZE          128
+
+_Static_assert((SMALL_GRANULARITY & (SMALL_GRANULARITY - 1)) == 0, "Small granularity must be power of two");
+_Static_assert((SPAN_HEADER_SIZE & (SPAN_HEADER_SIZE - 1)) == 0, "Span header size must be power of two");
+
+#if ENABLE_VALIDATE_ARGS
+//! Maximum allocation size to avoid integer overflow
+#undef  MAX_ALLOC_SIZE
+#define MAX_ALLOC_SIZE            (((size_t)-1) - _memory_span_size)
+#endif
+
+#define pointer_offset(ptr, ofs) (void*)((char*)(ptr) + (ptrdiff_t)(ofs))
+#define pointer_diff(first, second) (ptrdiff_t)((const char*)(first) - (const char*)(second))
+
+#define INVALID_POINTER ((void*)((uintptr_t)-1))
+
+#define SIZE_CLASS_LARGE SIZE_CLASS_COUNT
+#define SIZE_CLASS_HUGE ((uint32_t)-1)
+
+////////////
+///
+/// Data types
+///
+//////
+
+//! A memory heap, per thread
+typedef struct heap_t heap_t;
+//! Span of memory pages
+typedef struct span_t span_t;
+//! Span list
+typedef struct span_list_t span_list_t;
+//! Span active data
+typedef struct span_active_t span_active_t;
+//! Size class definition
+typedef struct size_class_t size_class_t;
+//! Global cache
+typedef struct global_cache_t global_cache_t;
+
+//! Flag indicating span is the first (master) span of a split superspan
+#define SPAN_FLAG_MASTER 1U
+//! Flag indicating span is a secondary (sub) span of a split superspan
+#define SPAN_FLAG_SUBSPAN 2U
+//! Flag indicating span has blocks with increased alignment
+#define SPAN_FLAG_ALIGNED_BLOCKS 4U
+
+#if ENABLE_ADAPTIVE_THREAD_CACHE || ENABLE_STATISTICS
+struct span_use_t {
+	//! Current number of spans used (actually used, not in cache)
+	atomic32_t current;
