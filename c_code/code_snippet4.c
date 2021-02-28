@@ -353,3 +353,83 @@ typedef struct global_cache_t global_cache_t;
 struct span_use_t {
 	//! Current number of spans used (actually used, not in cache)
 	atomic32_t current;
+	//! High water mark of spans used
+	atomic32_t high;
+#if ENABLE_STATISTICS
+	//! Number of spans transitioned to global cache
+	atomic32_t spans_to_global;
+	//! Number of spans transitioned from global cache
+	atomic32_t spans_from_global;
+	//! Number of spans transitioned to thread cache
+	atomic32_t spans_to_cache;
+	//! Number of spans transitioned from thread cache
+	atomic32_t spans_from_cache;
+	//! Number of spans transitioned to reserved state
+	atomic32_t spans_to_reserved;
+	//! Number of spans transitioned from reserved state
+	atomic32_t spans_from_reserved;
+	//! Number of raw memory map calls
+	atomic32_t spans_map_calls;
+#endif
+};
+typedef struct span_use_t span_use_t;
+#endif
+
+#if ENABLE_STATISTICS
+struct size_class_use_t {
+	//! Current number of allocations
+	atomic32_t alloc_current;
+	//! Peak number of allocations
+	int32_t alloc_peak;
+	//! Total number of allocations
+	atomic32_t alloc_total;
+	//! Total number of frees
+	atomic32_t free_total;
+	//! Number of spans in use
+	atomic32_t spans_current;
+	//! Number of spans transitioned to cache
+	int32_t spans_peak;
+	//! Number of spans transitioned to cache
+	atomic32_t spans_to_cache;
+	//! Number of spans transitioned from cache
+	atomic32_t spans_from_cache;
+	//! Number of spans transitioned from reserved state
+	atomic32_t spans_from_reserved;
+	//! Number of spans mapped
+	atomic32_t spans_map_calls;
+};
+typedef struct size_class_use_t size_class_use_t;
+#endif
+
+// A span can either represent a single span of memory pages with size declared by span_map_count configuration variable,
+// or a set of spans in a continuous region, a super span. Any reference to the term "span" usually refers to both a single
+// span or a super span. A super span can further be divided into multiple spans (or this, super spans), where the first
+// (super)span is the master and subsequent (super)spans are subspans. The master span keeps track of how many subspans
+// that are still alive and mapped in virtual memory, and once all subspans and master have been unmapped the entire
+// superspan region is released and unmapped (on Windows for example, the entire superspan range has to be released
+// in the same call to release the virtual memory range, but individual subranges can be decommitted individually
+// to reduce physical memory use).
+struct span_t {
+	//! Free list
+	void*       free_list;
+	//! Total block count of size class
+	uint32_t    block_count;
+	//! Size class
+	uint32_t    size_class;
+	//! Index of last block initialized in free list
+	uint32_t    free_list_limit;
+	//! Number of used blocks remaining when in partial state
+	uint32_t    used_count;
+	//! Deferred free list
+	atomicptr_t free_list_deferred;
+	//! Size of deferred free list, or list of spans when part of a cache list
+	uint32_t    list_size;
+	//! Size of a block
+	uint32_t    block_size;
+	//! Flags and counters
+	uint32_t    flags;
+	//! Number of spans
+	uint32_t    span_count;
+	//! Total span counter for master spans
+	uint32_t    total_spans;
+	//! Offset from master span for subspans
