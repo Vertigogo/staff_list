@@ -433,3 +433,101 @@ struct span_t {
 	//! Total span counter for master spans
 	uint32_t    total_spans;
 	//! Offset from master span for subspans
+	uint32_t    offset_from_master;
+	//! Remaining span counter, for master spans
+	atomic32_t  remaining_spans;
+	//! Alignment offset
+	uint32_t    align_offset;
+	//! Owning heap
+	heap_t*     heap;
+	//! Next span
+	span_t*     next;
+	//! Previous span
+	span_t*     prev;
+};
+_Static_assert(sizeof(span_t) <= SPAN_HEADER_SIZE, "span size mismatch");
+
+// Control structure for a heap, either a thread heap or a first class heap if enabled
+struct heap_t {
+	//! Owning thread ID
+	uintptr_t    owner_thread;
+	//! Free list of active span
+	void*        free_list[SIZE_CLASS_COUNT];
+	//! Double linked list of partially used spans with free blocks for each size class.
+	//  Previous span pointer in head points to tail span of list.
+	span_t*      partial_span[SIZE_CLASS_COUNT];
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	//! Double linked list of fully utilized spans with free blocks for each size class.
+	//  Previous span pointer in head points to tail span of list.
+	span_t*      full_span[SIZE_CLASS_COUNT];
+#endif
+#if ENABLE_THREAD_CACHE
+	//! List of free spans (single linked list)
+	span_t*      span_cache[LARGE_CLASS_COUNT];
+#endif
+	//! List of deferred free spans (single linked list)
+	atomicptr_t  span_free_deferred;
+#if ENABLE_ADAPTIVE_THREAD_CACHE || ENABLE_STATISTICS
+	//! Current and high water mark of spans used per span count
+	span_use_t   span_use[LARGE_CLASS_COUNT];
+#endif
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	//! Double linked list of large and huge spans allocated by this heap
+	span_t*      large_huge_span;
+#endif
+	//! Number of full spans
+	size_t       full_span_count;
+	//! Mapped but unused spans
+	span_t*      span_reserve;
+	//! Master span for mapped but unused spans
+	span_t*      span_reserve_master;
+	//! Number of mapped but unused spans
+	size_t       spans_reserved;
+	//! Next heap in id list
+	heap_t*      next_heap;
+	//! Next heap in orphan list
+	heap_t*      next_orphan;
+	//! Memory pages alignment offset
+	size_t       align_offset;
+	//! Heap ID
+	int32_t      id;
+	//! Finalization state flag
+	int          finalize;
+	//! Master heap owning the memory pages
+	heap_t*      master_heap;
+	//! Child count
+	atomic32_t   child_count;
+#if ENABLE_STATISTICS
+	//! Number of bytes transitioned thread -> global
+	atomic64_t   thread_to_global;
+	//! Number of bytes transitioned global -> thread
+	atomic64_t   global_to_thread;
+	//! Allocation stats per size class
+	size_class_use_t size_class_use[SIZE_CLASS_COUNT + 1];
+#endif
+};
+
+// Size class for defining a block size bucket
+struct size_class_t {
+	//! Size of blocks in this class
+	uint32_t block_size;
+	//! Number of blocks in each chunk
+	uint16_t block_count;
+	//! Class index this class is merged with
+	uint16_t class_idx;
+};
+_Static_assert(sizeof(size_class_t) == 8, "Size class size mismatch");
+
+struct global_cache_t {
+	//! Cache list pointer
+	atomicptr_t cache;
+	//! Cache size
+	atomic32_t size;
+	//! ABA counter
+	atomic32_t counter;
+};
+
+////////////
+///
+/// Global data
+///
