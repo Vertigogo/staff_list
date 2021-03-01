@@ -611,3 +611,89 @@ static int32_t _huge_pages_peak;
 ///
 /// Thread local heap and ID
 ///
+//////
+
+//! Current thread heap
+#if (defined(__APPLE__) || defined(__HAIKU__)) && ENABLE_PRELOAD
+static pthread_key_t _memory_thread_heap;
+#else
+#  ifdef _MSC_VER
+#    define _Thread_local __declspec(thread)
+#    define TLS_MODEL
+#  else
+#    define TLS_MODEL __attribute__((tls_model("initial-exec")))
+#    if !defined(__clang__) && defined(__GNUC__)
+#      define _Thread_local __thread
+#    endif
+#  endif
+static _Thread_local heap_t* _memory_thread_heap TLS_MODEL;
+#endif
+
+static inline heap_t*
+get_thread_heap_raw(void) {
+#if (defined(__APPLE__) || defined(__HAIKU__)) && ENABLE_PRELOAD
+	return pthread_getspecific(_memory_thread_heap);
+#else
+	return _memory_thread_heap;
+#endif
+}
+
+//! Get the current thread heap
+static inline heap_t*
+get_thread_heap(void) {
+	heap_t* heap = get_thread_heap_raw();
+#if ENABLE_PRELOAD
+	if (EXPECTED(heap != 0))
+		return heap;
+	rpmalloc_initialize();
+	return get_thread_heap_raw();
+#else
+	return heap;
+#endif
+}
+
+//! Fast thread ID
+static inline uintptr_t
+get_thread_id(void) {
+#if defined(_WIN32)
+	return (uintptr_t)((void*)NtCurrentTeb());
+#elif defined(__GNUC__) || defined(__clang__)
+	uintptr_t tid;
+#  if defined(__i386__)
+	__asm__("movl %%gs:0, %0" : "=r" (tid) : : );
+#  elif defined(__MACH__)
+	__asm__("movq %%gs:0, %0" : "=r" (tid) : : );
+#  elif defined(__x86_64__)
+	__asm__("movq %%fs:0, %0" : "=r" (tid) : : );
+#  elif defined(__arm__)
+	__asm__ volatile ("mrc p15, 0, %0, c13, c0, 3" : "=r" (tid));
+#  elif defined(__aarch64__)
+	__asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tid));
+#  else
+	tid = (uintptr_t)get_thread_heap_raw();
+#  endif
+	return tid;
+#else
+	return (uintptr_t)get_thread_heap_raw();
+#endif
+}
+
+//! Set the current thread heap
+static void
+set_thread_heap(heap_t* heap) {
+#if (defined(__APPLE__) || defined(__HAIKU__)) && ENABLE_PRELOAD
+	pthread_setspecific(_memory_thread_heap, heap);
+#else
+	_memory_thread_heap = heap;
+#endif
+	if (heap)
+		heap->owner_thread = get_thread_id();
+}
+
+////////////
+///
+/// Low level memory map/unmap
+///
+//////
+
+//! Map more virtual memory
