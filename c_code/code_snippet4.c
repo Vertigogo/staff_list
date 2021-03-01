@@ -531,3 +531,83 @@ struct global_cache_t {
 ///
 /// Global data
 ///
+//////
+
+//! Initialized flag
+static int _rpmalloc_initialized;
+//! Configuration
+static rpmalloc_config_t _memory_config;
+//! Memory page size
+static size_t _memory_page_size;
+//! Shift to divide by page size
+static size_t _memory_page_size_shift;
+//! Granularity at which memory pages are mapped by OS
+static size_t _memory_map_granularity;
+#if RPMALLOC_CONFIGURABLE
+//! Size of a span of memory pages
+static size_t _memory_span_size;
+//! Shift to divide by span size
+static size_t _memory_span_size_shift;
+//! Mask to get to start of a memory span
+static uintptr_t _memory_span_mask;
+#else
+//! Hardwired span size (64KiB)
+#define _memory_span_size (64 * 1024)
+#define _memory_span_size_shift 16
+#define _memory_span_mask (~((uintptr_t)(_memory_span_size - 1)))
+#endif
+//! Number of spans to map in each map call
+static size_t _memory_span_map_count;
+//! Number of spans to release from thread cache to global cache (single spans)
+static size_t _memory_span_release_count;
+//! Number of spans to release from thread cache to global cache (large multiple spans)
+static size_t _memory_span_release_count_large;
+//! Global size classes
+static size_class_t _memory_size_class[SIZE_CLASS_COUNT];
+//! Run-time size limit of medium blocks
+static size_t _memory_medium_size_limit;
+//! Heap ID counter
+static atomic32_t _memory_heap_id;
+//! Huge page support
+static int _memory_huge_pages;
+#if ENABLE_GLOBAL_CACHE
+//! Global span cache
+static global_cache_t _memory_span_cache[LARGE_CLASS_COUNT];
+#endif
+//! All heaps
+static atomicptr_t _memory_heaps[HEAP_ARRAY_SIZE];
+//! Orphaned heaps
+static atomicptr_t _memory_orphan_heaps;
+#if RPMALLOC_FIRST_CLASS_HEAPS
+//! Orphaned heaps (first class heaps)
+static atomicptr_t _memory_first_class_orphan_heaps;
+#endif
+//! Running orphan counter to avoid ABA issues in linked list
+static atomic32_t _memory_orphan_counter;
+#if ENABLE_STATISTICS
+//! Active heap count
+static atomic32_t _memory_active_heaps;
+//! Number of currently mapped memory pages
+static atomic32_t _mapped_pages;
+//! Peak number of concurrently mapped memory pages
+static int32_t _mapped_pages_peak;
+//! Number of mapped master spans
+static atomic32_t _master_spans;
+//! Number of currently unused spans
+static atomic32_t _reserved_spans;
+//! Running counter of total number of mapped memory pages since start
+static atomic32_t _mapped_total;
+//! Running counter of total number of unmapped memory pages since start
+static atomic32_t _unmapped_total;
+//! Number of currently mapped memory pages in OS calls
+static atomic32_t _mapped_pages_os;
+//! Number of currently allocated pages in huge allocations
+static atomic32_t _huge_pages_current;
+//! Peak number of currently allocated pages in huge allocations
+static int32_t _huge_pages_peak;
+#endif
+
+////////////
+///
+/// Thread local heap and ID
+///
