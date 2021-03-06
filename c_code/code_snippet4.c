@@ -960,3 +960,78 @@ _rpmalloc_span_map_from_reserve(heap_t* heap, size_t span_count) {
 	_rpmalloc_span_mark_as_subspan_unless_master(heap->span_reserve_master, span, span_count);
 	if (span_count <= LARGE_CLASS_COUNT)
 		_rpmalloc_stat_inc(&heap->span_use[span_count - 1].spans_from_reserved);
+
+	return span;
+}
+
+//! Get the aligned number of spans to map in based on wanted count, configured mapping granularity and the page size
+static size_t
+_rpmalloc_span_align_count(size_t span_count) {
+	size_t request_count = (span_count > _memory_span_map_count) ? span_count : _memory_span_map_count;
+	if ((_memory_page_size > _memory_span_size) && ((request_count * _memory_span_size) % _memory_page_size))
+		request_count += _memory_span_map_count - (request_count % _memory_span_map_count);
+	return request_count;
+}
+
+//! Setup a newly mapped span
+static void
+_rpmalloc_span_initialize(span_t* span, size_t total_span_count, size_t span_count, size_t align_offset) {
+	span->total_spans = (uint32_t)total_span_count;
+	span->span_count = (uint32_t)span_count;
+	span->align_offset = (uint32_t)align_offset;
+	span->flags = SPAN_FLAG_MASTER;
+	atomic_store32(&span->remaining_spans, (int32_t)total_span_count);
+}
+
+//! Map an aligned set of spans, taking configured mapping granularity and the page size into account
+static span_t*
+_rpmalloc_span_map_aligned_count(heap_t* heap, size_t span_count) {
+	//If we already have some, but not enough, reserved spans, release those to heap cache and map a new
+	//full set of spans. Otherwise we would waste memory if page size > span size (huge pages)
+	size_t aligned_span_count = _rpmalloc_span_align_count(span_count);
+	size_t align_offset = 0;
+	span_t* span = (span_t*)_rpmalloc_mmap(aligned_span_count * _memory_span_size, &align_offset);
+	if (!span)
+		return 0;
+	_rpmalloc_span_initialize(span, aligned_span_count, span_count, align_offset);
+	_rpmalloc_stat_add(&_reserved_spans, aligned_span_count);
+	_rpmalloc_stat_inc(&_master_spans);
+	if (span_count <= LARGE_CLASS_COUNT)
+		_rpmalloc_stat_inc(&heap->span_use[span_count - 1].spans_map_calls);
+	if (aligned_span_count > span_count) {
+		span_t* reserved_spans = (span_t*)pointer_offset(span, span_count * _memory_span_size);
+		size_t reserved_count = aligned_span_count - span_count;
+		if (heap->spans_reserved) {
+			_rpmalloc_span_mark_as_subspan_unless_master(heap->span_reserve_master, heap->span_reserve, heap->spans_reserved);
+			_rpmalloc_heap_cache_insert(heap, heap->span_reserve);
+		}
+		_rpmalloc_heap_set_reserved_spans(heap, span, reserved_spans, reserved_count);
+	}
+	return span;
+}
+
+//! Map in memory pages for the given number of spans (or use previously reserved pages)
+static span_t*
+_rpmalloc_span_map(heap_t* heap, size_t span_count) {
+	if (span_count <= heap->spans_reserved)
+		return _rpmalloc_span_map_from_reserve(heap, span_count);
+	return _rpmalloc_span_map_aligned_count(heap, span_count);
+}
+
+//! Unmap memory pages for the given number of spans (or mark as unused if no partial unmappings)
+static void
+_rpmalloc_span_unmap(span_t* span) {
+	assert((span->flags & SPAN_FLAG_MASTER) || (span->flags & SPAN_FLAG_SUBSPAN));
+	assert(!(span->flags & SPAN_FLAG_MASTER) || !(span->flags & SPAN_FLAG_SUBSPAN));
+
+	int is_master = !!(span->flags & SPAN_FLAG_MASTER);
+	span_t* master = is_master ? span : ((span_t*)pointer_offset(span, -(intptr_t)((uintptr_t)span->offset_from_master * _memory_span_size)));
+	assert(is_master || (span->flags & SPAN_FLAG_SUBSPAN));
+	assert(master->flags & SPAN_FLAG_MASTER);
+
+	size_t span_count = span->span_count;
+	if (!is_master) {
+		//Directly unmap subspans (unless huge pages, in which case we defer and unmap entire page range with master)
+		assert(span->align_offset == 0);
+		if (_memory_span_size >= _memory_page_size) {
+			_rpmalloc_unmap(span, span_count * _memory_span_size, 0, 0);
