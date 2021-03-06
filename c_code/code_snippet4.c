@@ -697,3 +697,85 @@ set_thread_heap(heap_t* heap) {
 //////
 
 //! Map more virtual memory
+//  size is number of bytes to map
+//  offset receives the offset in bytes from start of mapped region
+//  returns address to start of mapped region to use
+static void*
+_rpmalloc_mmap(size_t size, size_t* offset) {
+	assert(!(size % _memory_page_size));
+	assert(size >= _memory_page_size);
+	_rpmalloc_stat_add_peak(&_mapped_pages, (size >> _memory_page_size_shift), _mapped_pages_peak);
+	_rpmalloc_stat_add(&_mapped_total, (size >> _memory_page_size_shift));
+	return _memory_config.memory_map(size, offset);
+}
+
+//! Unmap virtual memory
+//  address is the memory address to unmap, as returned from _memory_map
+//  size is the number of bytes to unmap, which might be less than full region for a partial unmap
+//  offset is the offset in bytes to the actual mapped region, as set by _memory_map
+//  release is set to 0 for partial unmap, or size of entire range for a full unmap
+static void
+_rpmalloc_unmap(void* address, size_t size, size_t offset, size_t release) {
+	assert(!release || (release >= size));
+	assert(!release || (release >= _memory_page_size));
+	if (release) {
+		assert(!(release % _memory_page_size));
+		_rpmalloc_stat_sub(&_mapped_pages, (release >> _memory_page_size_shift));
+		_rpmalloc_stat_add(&_unmapped_total, (release >> _memory_page_size_shift));
+	}
+	_memory_config.memory_unmap(address, size, offset, release);
+}
+
+//! Default implementation to map new pages to virtual memory
+static void*
+_rpmalloc_mmap_os(size_t size, size_t* offset) {
+	//Either size is a heap (a single page) or a (multiple) span - we only need to align spans, and only if larger than map granularity
+	size_t padding = ((size >= _memory_span_size) && (_memory_span_size > _memory_map_granularity)) ? _memory_span_size : 0;
+	assert(size >= _memory_page_size);
+#if PLATFORM_WINDOWS
+	//Ok to MEM_COMMIT - according to MSDN, "actual physical pages are not allocated unless/until the virtual addresses are actually accessed"
+	void* ptr = VirtualAlloc(0, size + padding, (_memory_huge_pages ? MEM_LARGE_PAGES : 0) | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	if (!ptr) {
+		assert(ptr && "Failed to map virtual memory block");
+		return 0;
+	}
+#else
+	int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNINITIALIZED;
+#  if defined(__APPLE__)
+	int fd = (int)VM_MAKE_TAG(240U);
+	if (_memory_huge_pages)
+		fd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
+	void* ptr = mmap(0, size + padding, PROT_READ | PROT_WRITE, flags, fd, 0);
+#  elif defined(MAP_HUGETLB)
+	void* ptr = mmap(0, size + padding, PROT_READ | PROT_WRITE, (_memory_huge_pages ? MAP_HUGETLB : 0) | flags, -1, 0);
+#  else
+	void* ptr = mmap(0, size + padding, PROT_READ | PROT_WRITE, flags, -1, 0);
+#  endif
+	if ((ptr == MAP_FAILED) || !ptr) {
+		assert("Failed to map virtual memory block" == 0);
+		return 0;
+	}
+#endif
+	_rpmalloc_stat_add(&_mapped_pages_os, (int32_t)((size + padding) >> _memory_page_size_shift));
+	if (padding) {
+		size_t final_padding = padding - ((uintptr_t)ptr & ~_memory_span_mask);
+		assert(final_padding <= _memory_span_size);
+		assert(final_padding <= padding);
+		assert(!(final_padding % 8));
+		ptr = pointer_offset(ptr, final_padding);
+		*offset = final_padding >> 3;
+	}
+	assert((size < _memory_span_size) || !((uintptr_t)ptr & ~_memory_span_mask));
+	return ptr;
+}
+
+//! Default implementation to unmap pages from virtual memory
+static void
+_rpmalloc_unmap_os(void* address, size_t size, size_t offset, size_t release) {
+	assert(release || (offset == 0));
+	assert(!release || (release >= _memory_page_size));
+	assert(size >= _memory_page_size);
+	if (release && offset) {
+		offset <<= 3;
+		address = pointer_offset(address, -(int32_t)offset);
+#if PLATFORM_POSIX
