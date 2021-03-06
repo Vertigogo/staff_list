@@ -1035,3 +1035,89 @@ _rpmalloc_span_unmap(span_t* span) {
 		assert(span->align_offset == 0);
 		if (_memory_span_size >= _memory_page_size) {
 			_rpmalloc_unmap(span, span_count * _memory_span_size, 0, 0);
+			_rpmalloc_stat_sub(&_reserved_spans, span_count);
+		}
+	} else {
+		//Special double flag to denote an unmapped master
+		//It must be kept in memory since span header must be used
+		span->flags |= SPAN_FLAG_MASTER | SPAN_FLAG_SUBSPAN;
+	}
+
+	if (atomic_add32(&master->remaining_spans, -(int32_t)span_count) <= 0) {
+		//Everything unmapped, unmap the master span with release flag to unmap the entire range of the super span
+		assert(!!(master->flags & SPAN_FLAG_MASTER) && !!(master->flags & SPAN_FLAG_SUBSPAN));
+		size_t unmap_count = master->span_count;
+		if (_memory_span_size < _memory_page_size)
+			unmap_count = master->total_spans;
+		_rpmalloc_stat_sub(&_reserved_spans, unmap_count);
+		_rpmalloc_stat_sub(&_master_spans, 1);
+		_rpmalloc_unmap(master, unmap_count * _memory_span_size, master->align_offset, (size_t)master->total_spans * _memory_span_size);
+	}
+}
+
+//! Move the span (used for small or medium allocations) to the heap thread cache
+static void
+_rpmalloc_span_release_to_cache(heap_t* heap, span_t* span) {
+	assert(heap == span->heap);
+	assert(span->size_class < SIZE_CLASS_COUNT);
+#if ENABLE_ADAPTIVE_THREAD_CACHE || ENABLE_STATISTICS
+	atomic_decr32(&heap->span_use[0].current);
+#endif
+	_rpmalloc_stat_inc(&heap->span_use[0].spans_to_cache);
+	_rpmalloc_stat_inc(&heap->size_class_use[span->size_class].spans_to_cache);
+	_rpmalloc_stat_dec(&heap->size_class_use[span->size_class].spans_current);
+	_rpmalloc_heap_cache_insert(heap, span);
+}
+
+//! Initialize a (partial) free list up to next system memory page, while reserving the first block
+//! as allocated, returning number of blocks in list
+static uint32_t
+free_list_partial_init(void** list, void** first_block, void* page_start, void* block_start,
+                       uint32_t block_count, uint32_t block_size) {
+	assert(block_count);
+	*first_block = block_start;
+	if (block_count > 1) {
+		void* free_block = pointer_offset(block_start, block_size);
+		void* block_end = pointer_offset(block_start, (size_t)block_size * block_count);
+		//If block size is less than half a memory page, bound init to next memory page boundary
+		if (block_size < (_memory_page_size >> 1)) {
+			void* page_end = pointer_offset(page_start, _memory_page_size);
+			if (page_end < block_end)
+				block_end = page_end;
+		}
+		*list = free_block;
+		block_count = 2;
+		void* next_block = pointer_offset(free_block, block_size);
+		while (next_block < block_end) {
+			*((void**)free_block) = next_block;
+			free_block = next_block;
+			++block_count;
+			next_block = pointer_offset(next_block, block_size);
+		}
+		*((void**)free_block) = 0;
+	} else {
+		*list = 0;
+	}
+	return block_count;
+}
+
+//! Initialize an unused span (from cache or mapped) to be new active span, putting the initial free list in heap class free list
+static void*
+_rpmalloc_span_initialize_new(heap_t* heap, span_t* span, uint32_t class_idx) {
+	assert(span->span_count == 1);
+	size_class_t* size_class = _memory_size_class + class_idx;
+	span->size_class = class_idx;
+	span->heap = heap;
+	span->flags &= ~SPAN_FLAG_ALIGNED_BLOCKS;
+	span->block_size = size_class->block_size;
+	span->block_count = size_class->block_count;
+	span->free_list = 0;
+	span->list_size = 0;
+	atomic_store_ptr_release(&span->free_list_deferred, 0);
+
+	//Setup free list. Only initialize one system page worth of free blocks in list
+	void* block;
+	span->free_list_limit = free_list_partial_init(&heap->free_list[class_idx], &block,
+		span, pointer_offset(span, SPAN_HEADER_SIZE), size_class->block_count, size_class->block_size);
+	//Link span as partial if there remains blocks to be initialized as free list, or full if fully initialized
+	if (span->free_list_limit < span->block_count) {
