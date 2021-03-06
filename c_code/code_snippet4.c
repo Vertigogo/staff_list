@@ -866,3 +866,97 @@ _rpmalloc_span_list_split(span_t* span, size_t limit) {
 	if (limit < 2)
 		limit = 2;
 	if (span->list_size > limit) {
+		uint32_t list_size = 1;
+		span_t* last = span;
+		next = span->next;
+		while (list_size < limit) {
+			last = next;
+			next = next->next;
+			++list_size;
+		}
+		last->next = 0;
+		assert(next);
+		next->list_size = span->list_size - list_size;
+		span->list_size = list_size;
+		span->prev = 0;
+	}
+	return next;
+}
+
+#endif
+
+//! Add a span to double linked list at the head
+static void
+_rpmalloc_span_double_link_list_add(span_t** head, span_t* span) {
+	if (*head) {
+		span->next = *head;
+		(*head)->prev = span;
+	} else {
+		span->next = 0;
+	}
+	*head = span;
+}
+
+//! Pop head span from double linked list
+static void
+_rpmalloc_span_double_link_list_pop_head(span_t** head, span_t* span) {
+	assert(*head == span);
+	span = *head;
+	*head = span->next;
+}
+
+//! Remove a span from double linked list
+static void
+_rpmalloc_span_double_link_list_remove(span_t** head, span_t* span) {
+	assert(*head);
+	if (*head == span) {
+		*head = span->next;
+	} else {
+		span_t* next_span = span->next;
+		span_t* prev_span = span->prev;
+		prev_span->next = next_span;
+		if (EXPECTED(next_span != 0)) {
+			next_span->prev = prev_span;
+		}
+	}
+}
+
+
+////////////
+///
+/// Span control
+///
+//////
+
+static void
+_rpmalloc_heap_cache_insert(heap_t* heap, span_t* span);
+
+static void
+_rpmalloc_heap_finalize(heap_t* heap);
+
+static void
+_rpmalloc_heap_set_reserved_spans(heap_t* heap, span_t* master, span_t* reserve, size_t reserve_span_count);
+
+//! Declare the span to be a subspan and store distance from master span and span count
+static void
+_rpmalloc_span_mark_as_subspan_unless_master(span_t* master, span_t* subspan, size_t span_count) {
+	assert((subspan != master) || (subspan->flags & SPAN_FLAG_MASTER));
+	if (subspan != master) {
+		subspan->flags = SPAN_FLAG_SUBSPAN;
+		subspan->offset_from_master = (uint32_t)((uintptr_t)pointer_diff(subspan, master) >> _memory_span_size_shift);
+		subspan->align_offset = 0;
+	}
+	subspan->span_count = (uint32_t)span_count;
+}
+
+//! Use reserved spans to fulfill a memory map request (reserve size must be checked by caller)
+static span_t*
+_rpmalloc_span_map_from_reserve(heap_t* heap, size_t span_count) {
+	//Update the heap span reserve
+	span_t* span = heap->span_reserve;
+	heap->span_reserve = (span_t*)pointer_offset(span, span_count * _memory_span_size);
+	heap->spans_reserved -= span_count;
+
+	_rpmalloc_span_mark_as_subspan_unless_master(heap->span_reserve_master, span, span_count);
+	if (span_count <= LARGE_CLASS_COUNT)
+		_rpmalloc_stat_inc(&heap->span_use[span_count - 1].spans_from_reserved);
