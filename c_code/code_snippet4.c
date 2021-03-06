@@ -779,3 +779,90 @@ _rpmalloc_unmap_os(void* address, size_t size, size_t offset, size_t release) {
 		offset <<= 3;
 		address = pointer_offset(address, -(int32_t)offset);
 #if PLATFORM_POSIX
+		//Padding is always one span size
+		release += _memory_span_size;
+#endif
+	}
+#if !DISABLE_UNMAP
+#if PLATFORM_WINDOWS
+	if (!VirtualFree(address, release ? 0 : size, release ? MEM_RELEASE : MEM_DECOMMIT)) {
+		assert(address && "Failed to unmap virtual memory block");
+	}
+#else
+	if (release) {
+		if (munmap(address, release)) {
+			assert("Failed to unmap virtual memory block" == 0);
+		}
+	}
+	else {
+#if defined(POSIX_MADV_FREE)
+		if (posix_madvise(address, size, POSIX_MADV_FREE))
+#endif
+		if (posix_madvise(address, size, POSIX_MADV_DONTNEED)) {
+			assert("Failed to madvise virtual memory block as free" == 0);
+		}
+	}
+#endif
+#endif
+	if (release)
+		_rpmalloc_stat_sub(&_mapped_pages_os, release >> _memory_page_size_shift);
+}
+
+
+////////////
+///
+/// Span linked list management
+///
+//////
+
+#if ENABLE_THREAD_CACHE
+
+static void
+_rpmalloc_span_unmap(span_t* span);
+
+//! Unmap a single linked list of spans
+static void
+_rpmalloc_span_list_unmap_all(span_t* span) {
+	size_t list_size = span->list_size;
+	for (size_t ispan = 0; ispan < list_size; ++ispan) {
+		span_t* next_span = span->next;
+		_rpmalloc_span_unmap(span);
+		span = next_span;
+	}
+	assert(!span);
+}
+
+//! Add span to head of single linked span list
+static size_t
+_rpmalloc_span_list_push(span_t** head, span_t* span) {
+	span->next = *head;
+	if (*head)
+		span->list_size = (*head)->list_size + 1;
+	else
+		span->list_size = 1;
+	*head = span;
+	return span->list_size;
+}
+
+//! Remove span from head of single linked span list, returns the new list head
+static span_t*
+_rpmalloc_span_list_pop(span_t** head) {
+	span_t* span = *head;
+	span_t* next_span = 0;
+	if (span->list_size > 1) {
+		assert(span->next);
+		next_span = span->next;
+		assert(next_span);
+		next_span->list_size = span->list_size - 1;
+	}
+	*head = next_span;
+	return span;
+}
+
+//! Split a single linked span list
+static span_t*
+_rpmalloc_span_list_split(span_t* span, size_t limit) {
+	span_t* next = 0;
+	if (limit < 2)
+		limit = 2;
+	if (span->list_size > limit) {
