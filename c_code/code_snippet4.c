@@ -1121,3 +1121,77 @@ _rpmalloc_span_initialize_new(heap_t* heap, span_t* span, uint32_t class_idx) {
 		span, pointer_offset(span, SPAN_HEADER_SIZE), size_class->block_count, size_class->block_size);
 	//Link span as partial if there remains blocks to be initialized as free list, or full if fully initialized
 	if (span->free_list_limit < span->block_count) {
+		_rpmalloc_span_double_link_list_add(&heap->partial_span[class_idx], span);
+		span->used_count = span->free_list_limit;
+	} else {
+#if RPMALLOC_FIRST_CLASS_HEAPS
+		_rpmalloc_span_double_link_list_add(&heap->full_span[class_idx], span);
+#endif
+		++heap->full_span_count;
+		span->used_count = span->block_count;
+	}
+	return block;
+}
+
+static void
+_rpmalloc_span_extract_free_list_deferred(span_t* span) {
+	// We need acquire semantics on the CAS operation since we are interested in the list size
+	// Refer to _rpmalloc_deallocate_defer_small_or_medium for further comments on this dependency
+	do {
+		span->free_list = atomic_load_ptr(&span->free_list_deferred);
+	} while ((span->free_list == INVALID_POINTER) || !atomic_cas_ptr_acquire(&span->free_list_deferred, INVALID_POINTER, span->free_list));
+	span->used_count -= span->list_size;
+	span->list_size = 0;
+	atomic_store_ptr_release(&span->free_list_deferred, 0);
+}
+
+static int
+_rpmalloc_span_is_fully_utilized(span_t* span) {
+	assert(span->free_list_limit <= span->block_count);
+	return !span->free_list && (span->free_list_limit >= span->block_count);
+}
+
+static int
+_rpmalloc_span_finalize(heap_t* heap, size_t iclass, span_t* span, span_t** list_head) {
+	span_t* class_span = (span_t*)((uintptr_t)heap->free_list[iclass] & _memory_span_mask);
+	if (span == class_span) {
+		// Adopt the heap class free list back into the span free list
+		void* block = span->free_list;
+		void* last_block = 0;
+		while (block) {
+			last_block = block;
+			block = *((void**)block);
+		}
+		uint32_t free_count = 0;
+		block = heap->free_list[iclass];
+		while (block) {
+			++free_count;
+			block = *((void**)block);
+		}
+		if (last_block) {
+			*((void**)last_block) = heap->free_list[iclass];
+		} else {
+			span->free_list = heap->free_list[iclass];
+		}
+		heap->free_list[iclass] = 0;
+		span->used_count -= free_count;
+	}
+	//If this assert triggers you have memory leaks
+	assert(span->list_size == span->used_count);
+	if (span->list_size == span->used_count) {
+		_rpmalloc_stat_dec(&heap->span_use[0].current);
+		_rpmalloc_stat_dec(&heap->size_class_use[iclass].spans_current);
+		// This function only used for spans in double linked lists
+		if (list_head)
+			_rpmalloc_span_double_link_list_remove(list_head, span);
+		_rpmalloc_span_unmap(span);
+		return 1;
+	}
+	return 0;
+}
+
+
+////////////
+///
+/// Global cache
+///
