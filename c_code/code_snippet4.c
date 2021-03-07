@@ -1195,3 +1195,88 @@ _rpmalloc_span_finalize(heap_t* heap, size_t iclass, span_t* span, span_t** list
 ///
 /// Global cache
 ///
+//////
+
+#if ENABLE_GLOBAL_CACHE
+
+//! Insert the given list of memory page spans in the global cache
+static void
+_rpmalloc_global_cache_insert(global_cache_t* cache, span_t* span, size_t cache_limit) {
+	assert((span->list_size == 1) || (span->next != 0));
+	int32_t list_size = (int32_t)span->list_size;
+	//Unmap if cache has reached the limit. Does not need stronger synchronization, the worst
+	//case is that the span list is unmapped when it could have been cached (no real dependency
+	//between the two variables)
+	if (atomic_add32(&cache->size, list_size) > (int32_t)cache_limit) {
+#if !ENABLE_UNLIMITED_GLOBAL_CACHE
+		_rpmalloc_span_list_unmap_all(span);
+		atomic_add32(&cache->size, -list_size);
+		return;
+#endif
+	}
+	void* current_cache, *new_cache;
+	do {
+		current_cache = atomic_load_ptr(&cache->cache);
+		span->prev = (span_t*)((uintptr_t)current_cache & _memory_span_mask);
+		new_cache = (void*)((uintptr_t)span | ((uintptr_t)atomic_incr32(&cache->counter) & ~_memory_span_mask));
+	} while (!atomic_cas_ptr(&cache->cache, new_cache, current_cache));
+}
+
+//! Extract a number of memory page spans from the global cache
+static span_t*
+_rpmalloc_global_cache_extract(global_cache_t* cache) {
+	uintptr_t span_ptr;
+	do {
+		void* global_span = atomic_load_ptr(&cache->cache);
+		span_ptr = (uintptr_t)global_span & _memory_span_mask;
+		if (span_ptr) {
+			span_t* span = (span_t*)span_ptr;
+			//By accessing the span ptr before it is swapped out of list we assume that a contending thread
+			//does not manage to traverse the span to being unmapped before we access it
+			void* new_cache = (void*)((uintptr_t)span->prev | ((uintptr_t)atomic_incr32(&cache->counter) & ~_memory_span_mask));
+			if (atomic_cas_ptr(&cache->cache, new_cache, global_span)) {
+				atomic_add32(&cache->size, -(int32_t)span->list_size);
+				return span;
+			}
+		}
+	} while (span_ptr);
+	return 0;
+}
+
+//! Finalize a global cache, only valid from allocator finalization (not thread safe)
+static void
+_rpmalloc_global_cache_finalize(global_cache_t* cache) {
+	void* current_cache = atomic_load_ptr(&cache->cache);
+	span_t* span = (span_t*)((uintptr_t)current_cache & _memory_span_mask);
+	while (span) {
+		span_t* skip_span = (span_t*)((uintptr_t)span->prev & _memory_span_mask);
+		atomic_add32(&cache->size, -(int32_t)span->list_size);
+		_rpmalloc_span_list_unmap_all(span);
+		span = skip_span;
+	}
+	assert(!atomic_load32(&cache->size));
+	atomic_store_ptr(&cache->cache, 0);
+	atomic_store32(&cache->size, 0);
+}
+
+//! Insert the given list of memory page spans in the global cache
+static void
+_rpmalloc_global_cache_insert_span_list(span_t* span) {
+	size_t span_count = span->span_count;
+#if ENABLE_UNLIMITED_GLOBAL_CACHE
+	_rpmalloc_global_cache_insert(&_memory_span_cache[span_count - 1], span, 0);
+#else
+	const size_t cache_limit = (GLOBAL_CACHE_MULTIPLIER * ((span_count == 1) ? _memory_span_release_count : _memory_span_release_count_large));
+	_rpmalloc_global_cache_insert(&_memory_span_cache[span_count - 1], span, cache_limit);
+#endif
+}
+
+//! Extract a number of memory page spans from the global cache for large blocks
+static span_t*
+_rpmalloc_global_cache_extract_span_list(size_t span_count) {
+	span_t* span = _rpmalloc_global_cache_extract(&_memory_span_cache[span_count - 1]);
+	assert(!span || (span->span_count == span_count));
+	return span;
+}
+
+#endif
