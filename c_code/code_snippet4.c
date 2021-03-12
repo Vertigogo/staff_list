@@ -1372,3 +1372,82 @@ _rpmalloc_heap_global_finalize(heap_t* heap) {
 #if ENABLE_THREAD_CACHE
 	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
 		span_t* span = heap->span_cache[iclass];
+		heap->span_cache[iclass] = 0;
+		if (span)
+			_rpmalloc_span_list_unmap_all(span);
+	}
+#endif
+
+	if (heap->full_span_count) {
+		--heap->finalize;
+		return;
+	}
+
+	for (size_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
+		if (heap->free_list[iclass] || heap->partial_span[iclass]) {
+			--heap->finalize;
+			return;
+		}
+	}
+	//Heap is now completely free, unmap and remove from heap list
+	size_t list_idx = heap->id % HEAP_ARRAY_SIZE;
+	heap_t* list_heap = (heap_t*)atomic_load_ptr(&_memory_heaps[list_idx]);
+	if (list_heap == heap) {
+		atomic_store_ptr(&_memory_heaps[list_idx], heap->next_heap);
+	} else {
+		while (list_heap->next_heap != heap)
+			list_heap = list_heap->next_heap;
+		list_heap->next_heap = heap->next_heap;
+	}
+
+	_rpmalloc_heap_unmap( heap );
+}
+
+//! Insert a single span into thread heap cache, releasing to global cache if overflow
+static void
+_rpmalloc_heap_cache_insert(heap_t* heap, span_t* span) {
+	if (UNEXPECTED(heap->finalize != 0)) {
+		_rpmalloc_span_unmap(span);
+		_rpmalloc_heap_global_finalize(heap);
+		return;
+	}
+#if ENABLE_THREAD_CACHE
+	size_t span_count = span->span_count;
+	size_t idx = span_count - 1;
+	_rpmalloc_stat_inc(&heap->span_use[idx].spans_to_cache);
+#if ENABLE_UNLIMITED_THREAD_CACHE
+	_rpmalloc_span_list_push(&heap->span_cache[idx], span);
+#else
+	const size_t release_count = (!idx ? _memory_span_release_count : _memory_span_release_count_large);
+	size_t current_cache_size = _rpmalloc_span_list_push(&heap->span_cache[idx], span);
+	if (current_cache_size <= release_count)
+		return;
+	const size_t hard_limit = release_count * THREAD_CACHE_MULTIPLIER;
+	if (current_cache_size <= hard_limit) {
+#if ENABLE_ADAPTIVE_THREAD_CACHE
+		//Require 25% of high water mark to remain in cache (and at least 1, if use is 0)
+		const size_t high_mark = heap->span_use[idx].high;
+		const size_t min_limit = (high_mark >> 2) + release_count + 1;
+		if (current_cache_size < min_limit)
+			return;
+#else
+		return;
+#endif
+	}
+	heap->span_cache[idx] = _rpmalloc_span_list_split(span, release_count);
+	assert(span->list_size == release_count);
+#if ENABLE_GLOBAL_CACHE
+	_rpmalloc_stat_add64(&heap->thread_to_global, (size_t)span->list_size * span_count * _memory_span_size);
+	_rpmalloc_stat_add(&heap->span_use[idx].spans_to_global, span->list_size);
+	_rpmalloc_global_cache_insert_span_list(span);
+#else
+	_rpmalloc_span_list_unmap_all(span);
+#endif
+#endif
+#else
+	(void)sizeof(heap);
+	_rpmalloc_span_unmap(span);
+#endif
+}
+
+//! Extract the given number of spans from the different cache levels
