@@ -1280,3 +1280,95 @@ _rpmalloc_global_cache_extract_span_list(size_t span_count) {
 }
 
 #endif
+
+
+////////////
+///
+/// Heap control
+///
+//////
+
+static void _rpmalloc_deallocate_huge(span_t*);
+
+//! Store the given spans as reserve in the given heap
+static void
+_rpmalloc_heap_set_reserved_spans(heap_t* heap, span_t* master, span_t* reserve, size_t reserve_span_count) {
+	heap->span_reserve_master = master;
+	heap->span_reserve = reserve;
+	heap->spans_reserved = reserve_span_count;
+}
+
+//! Adopt the deferred span cache list, optionally extracting the first single span for immediate re-use
+static void
+_rpmalloc_heap_cache_adopt_deferred(heap_t* heap, span_t** single_span) {
+	span_t* span = (span_t*)atomic_load_ptr(&heap->span_free_deferred);
+	if (!span)
+		return;
+	while (!atomic_cas_ptr(&heap->span_free_deferred, 0, span))
+		span = (span_t*)atomic_load_ptr(&heap->span_free_deferred);
+	while (span) {
+		span_t* next_span = (span_t*)span->free_list;
+		assert(span->heap == heap);
+		if (EXPECTED(span->size_class < SIZE_CLASS_COUNT)) {
+			assert(heap->full_span_count);
+			--heap->full_span_count;
+#if RPMALLOC_FIRST_CLASS_HEAPS
+			_rpmalloc_span_double_link_list_remove(&heap->full_span[span->size_class], span);
+#endif
+			if (single_span && !*single_span) {
+				*single_span = span;
+			} else {
+				_rpmalloc_stat_dec(&heap->span_use[0].current);
+				_rpmalloc_stat_dec(&heap->size_class_use[span->size_class].spans_current);
+				_rpmalloc_heap_cache_insert(heap, span);
+			}
+		} else {
+			if (span->size_class == SIZE_CLASS_HUGE) {
+				_rpmalloc_deallocate_huge(span);
+			} else {
+				assert(span->size_class == SIZE_CLASS_LARGE);
+				assert(heap->full_span_count);
+				--heap->full_span_count;
+#if RPMALLOC_FIRST_CLASS_HEAPS
+				_rpmalloc_span_double_link_list_remove(&heap->large_huge_span, span);
+#endif
+				uint32_t idx = span->span_count - 1;
+				if (!idx && single_span && !*single_span) {
+					*single_span = span;
+				} else {
+					_rpmalloc_stat_dec(&heap->span_use[idx].current);
+					_rpmalloc_heap_cache_insert(heap, span);
+				}
+			}
+		}
+		span = next_span;
+	}
+}
+
+static void
+_rpmalloc_heap_unmap(heap_t* heap) {
+	if (!heap->master_heap) {
+		if ((heap->finalize > 1) && !atomic_load32(&heap->child_count)) {
+			size_t heap_size = sizeof(heap_t);
+			size_t block_size = _memory_page_size * ((heap_size + _memory_page_size - 1) >> _memory_page_size_shift);
+			_rpmalloc_unmap(heap, block_size, heap->align_offset, block_size);
+		}
+	} else {
+		if (atomic_decr32(&heap->master_heap->child_count) == 0) {
+			_rpmalloc_heap_unmap(heap->master_heap);
+		}
+	}
+}
+
+static void
+_rpmalloc_heap_global_finalize(heap_t* heap) {
+	if (heap->finalize++ > 1) {
+		--heap->finalize;
+		return;
+	}
+
+	_rpmalloc_heap_finalize(heap);
+
+#if ENABLE_THREAD_CACHE
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		span_t* span = heap->span_cache[iclass];
