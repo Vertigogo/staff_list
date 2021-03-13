@@ -1698,3 +1698,107 @@ _rpmalloc_heap_finalize(heap_t* heap) {
 				if (list)
 					_rpmalloc_span_double_link_list_remove(list, class_span);
 				_rpmalloc_span_double_link_list_add(&heap->partial_span[iclass], class_span);
+			}
+		}
+	}
+
+#if ENABLE_THREAD_CACHE
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		if (heap->span_cache[iclass]) {
+			_rpmalloc_span_list_unmap_all(heap->span_cache[iclass]);
+			heap->span_cache[iclass] = 0;
+		}
+	}
+#endif
+	assert(!atomic_load_ptr(&heap->span_free_deferred));
+}
+
+
+////////////
+///
+/// Allocation entry points
+///
+//////
+
+//! Pop first block from a free list
+static void*
+free_list_pop(void** list) {
+	void* block = *list;
+	*list = *((void**)block);
+	return block;
+}
+
+//! Allocate a small/medium sized memory block from the given heap
+static void*
+_rpmalloc_allocate_from_heap_fallback(heap_t* heap, uint32_t class_idx) {
+	span_t* span = heap->partial_span[class_idx];
+	if (EXPECTED(span != 0)) {
+		assert(span->block_count == _memory_size_class[span->size_class].block_count);
+		assert(!_rpmalloc_span_is_fully_utilized(span));
+		void* block;
+		if (span->free_list) {
+			//Swap in free list if not empty
+			heap->free_list[class_idx] = span->free_list;
+			span->free_list = 0;
+			block = free_list_pop(&heap->free_list[class_idx]);
+		} else {
+			//If the span did not fully initialize free list, link up another page worth of blocks
+			void* block_start = pointer_offset(span, SPAN_HEADER_SIZE + ((size_t)span->free_list_limit * span->block_size));
+			span->free_list_limit += free_list_partial_init(&heap->free_list[class_idx], &block,
+				(void*)((uintptr_t)block_start & ~(_memory_page_size - 1)), block_start,
+				span->block_count - span->free_list_limit, span->block_size);
+		}
+		assert(span->free_list_limit <= span->block_count);
+		span->used_count = span->free_list_limit;
+
+		//Swap in deferred free list if present
+		if (atomic_load_ptr(&span->free_list_deferred))
+			_rpmalloc_span_extract_free_list_deferred(span);
+
+		//If span is still not fully utilized keep it in partial list and early return block
+		if (!_rpmalloc_span_is_fully_utilized(span))
+			return block;
+
+		//The span is fully utilized, unlink from partial list and add to fully utilized list
+		_rpmalloc_span_double_link_list_pop_head(&heap->partial_span[class_idx], span);
+#if RPMALLOC_FIRST_CLASS_HEAPS
+		_rpmalloc_span_double_link_list_add(&heap->full_span[class_idx], span);
+#endif
+		++heap->full_span_count;
+		return block;
+	}
+
+	//Find a span in one of the cache levels
+	span = _rpmalloc_heap_extract_new_span(heap, 1, class_idx);
+	if (EXPECTED(span != 0)) {
+		//Mark span as owned by this heap and set base data, return first block
+		return _rpmalloc_span_initialize_new(heap, span, class_idx);
+	}
+
+	return 0;
+}
+
+//! Allocate a small sized memory block from the given heap
+static void*
+_rpmalloc_allocate_small(heap_t* heap, size_t size) {
+	assert(heap);
+	//Small sizes have unique size classes
+	const uint32_t class_idx = (uint32_t)((size + (SMALL_GRANULARITY - 1)) >> SMALL_GRANULARITY_SHIFT);
+	_rpmalloc_stat_inc_alloc(heap, class_idx);
+	if (EXPECTED(heap->free_list[class_idx] != 0))
+		return free_list_pop(&heap->free_list[class_idx]);
+	return _rpmalloc_allocate_from_heap_fallback(heap, class_idx);
+}
+
+//! Allocate a medium sized memory block from the given heap
+static void*
+_rpmalloc_allocate_medium(heap_t* heap, size_t size) {
+	assert(heap);
+	//Calculate the size class index and do a dependent lookup of the final class index (in case of merged classes)
+	const uint32_t base_idx = (uint32_t)(SMALL_CLASS_COUNT + ((size - (SMALL_SIZE_LIMIT + 1)) >> MEDIUM_GRANULARITY_SHIFT));
+	const uint32_t class_idx = _memory_size_class[base_idx].class_idx;
+	_rpmalloc_stat_inc_alloc(heap, class_idx);
+	if (EXPECTED(heap->free_list[class_idx] != 0))
+		return free_list_pop(&heap->free_list[class_idx]);
+	return _rpmalloc_allocate_from_heap_fallback(heap, class_idx);
+}
