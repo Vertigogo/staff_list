@@ -1451,3 +1451,91 @@ _rpmalloc_heap_cache_insert(heap_t* heap, span_t* span) {
 }
 
 //! Extract the given number of spans from the different cache levels
+static span_t*
+_rpmalloc_heap_thread_cache_extract(heap_t* heap, size_t span_count) {
+	span_t* span = 0;
+	size_t idx = span_count - 1;
+	if (!idx)
+		_rpmalloc_heap_cache_adopt_deferred(heap, &span);
+#if ENABLE_THREAD_CACHE
+	if (!span && heap->span_cache[idx]) {
+		_rpmalloc_stat_inc(&heap->span_use[idx].spans_from_cache);
+		span = _rpmalloc_span_list_pop(&heap->span_cache[idx]);
+	}
+#endif
+	return span;
+}
+
+static span_t*
+_rpmalloc_heap_reserved_extract(heap_t* heap, size_t span_count) {
+	if (heap->spans_reserved >= span_count)
+		return _rpmalloc_span_map(heap, span_count);
+	return 0;
+}
+
+//! Extract a span from the global cache
+static span_t*
+_rpmalloc_heap_global_cache_extract(heap_t* heap, size_t span_count) {
+#if ENABLE_GLOBAL_CACHE
+	size_t idx = span_count - 1;
+	heap->span_cache[idx] = _rpmalloc_global_cache_extract_span_list(span_count);
+	if (heap->span_cache[idx]) {
+		_rpmalloc_stat_add64(&heap->global_to_thread, (size_t)heap->span_cache[idx]->list_size * span_count * _memory_span_size);
+		_rpmalloc_stat_add(&heap->span_use[idx].spans_from_global, heap->span_cache[idx]->list_size);
+		return _rpmalloc_span_list_pop(&heap->span_cache[idx]);
+	}
+#endif
+	(void)sizeof(heap);
+	(void)sizeof(span_count);
+	return 0;
+}
+
+//! Get a span from one of the cache levels (thread cache, reserved, global cache) or fallback to mapping more memory
+static span_t*
+_rpmalloc_heap_extract_new_span(heap_t* heap, size_t span_count, uint32_t class_idx) {
+	(void)sizeof(class_idx);
+#if ENABLE_ADAPTIVE_THREAD_CACHE || ENABLE_STATISTICS
+	uint32_t idx = (uint32_t)span_count - 1;
+	uint32_t current_count = (uint32_t)atomic_incr32(&heap->span_use[idx].current);
+	if (current_count > (uint32_t)atomic_load32(&heap->span_use[idx].high))
+		atomic_store32(&heap->span_use[idx].high, (int32_t)current_count);
+	_rpmalloc_stat_add_peak(&heap->size_class_use[class_idx].spans_current, 1, heap->size_class_use[class_idx].spans_peak);
+#endif
+	span_t* span = _rpmalloc_heap_thread_cache_extract(heap, span_count);
+	if (EXPECTED(span != 0)) {
+		_rpmalloc_stat_inc(&heap->size_class_use[class_idx].spans_from_cache);
+		return span;
+	}
+	span = _rpmalloc_heap_reserved_extract(heap, span_count);
+	if (EXPECTED(span != 0)) {
+		_rpmalloc_stat_inc(&heap->size_class_use[class_idx].spans_from_reserved);
+		return span;
+	}
+	span = _rpmalloc_heap_global_cache_extract(heap, span_count);
+	if (EXPECTED(span != 0)) {
+		_rpmalloc_stat_inc(&heap->size_class_use[class_idx].spans_from_cache);
+		return span;
+	}
+	//Final fallback, map in more virtual memory
+	span = _rpmalloc_span_map(heap, span_count);
+	_rpmalloc_stat_inc(&heap->size_class_use[class_idx].spans_map_calls);
+	return span;
+}
+
+static void
+_rpmalloc_heap_initialize(heap_t* heap) {
+	memset(heap, 0, sizeof(heap_t));
+
+	//Get a new heap ID
+	heap->id = 1 + atomic_incr32(&_memory_heap_id);
+
+	//Link in heap in heap ID map
+	heap_t* next_heap;
+	size_t list_idx = heap->id % HEAP_ARRAY_SIZE;
+	do {
+		next_heap = (heap_t*)atomic_load_ptr(&_memory_heaps[list_idx]);
+		heap->next_heap = next_heap;
+	} while (!atomic_cas_ptr(&_memory_heaps[list_idx], heap, next_heap));
+}
+
+static void
