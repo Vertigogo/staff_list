@@ -1539,3 +1539,81 @@ _rpmalloc_heap_initialize(heap_t* heap) {
 }
 
 static void
+_rpmalloc_heap_orphan(heap_t* heap, int first_class) {
+	void* raw_heap;
+	uintptr_t orphan_counter;
+	heap_t* last_heap;
+	heap->owner_thread = (uintptr_t)-1;
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	atomicptr_t* heap_list = (first_class ? &_memory_first_class_orphan_heaps : &_memory_orphan_heaps);
+#else
+	(void)sizeof(first_class);
+	atomicptr_t* heap_list = &_memory_orphan_heaps;
+#endif
+	do {
+		last_heap = (heap_t*)atomic_load_ptr(heap_list);
+		heap->next_orphan = (heap_t*)((uintptr_t)last_heap & ~(uintptr_t)(HEAP_ORPHAN_ABA_SIZE - 1));
+		orphan_counter = (uintptr_t)atomic_incr32(&_memory_orphan_counter);
+		raw_heap = (void*)((uintptr_t)heap | (orphan_counter & (uintptr_t)(HEAP_ORPHAN_ABA_SIZE - 1)));
+	} while (!atomic_cas_ptr(heap_list, raw_heap, last_heap));
+}
+
+//! Allocate a new heap from newly mapped memory pages
+static heap_t*
+_rpmalloc_heap_allocate_new(void) {
+	//Map in pages for a new heap
+	size_t align_offset = 0;
+	size_t heap_size = sizeof(heap_t);
+	size_t block_size = _memory_page_size * ((heap_size + _memory_page_size - 1) >> _memory_page_size_shift);
+	heap_t* heap = (heap_t*)_rpmalloc_mmap(block_size, &align_offset);
+	if (!heap)
+		return heap;
+
+	_rpmalloc_heap_initialize(heap);
+	heap->align_offset = align_offset;
+
+	//Put extra heaps as orphans, aligning to make sure ABA protection bits fit in pointer low bits
+	size_t aligned_heap_size = HEAP_ORPHAN_ABA_SIZE * ((heap_size + HEAP_ORPHAN_ABA_SIZE - 1) / HEAP_ORPHAN_ABA_SIZE);
+	size_t num_heaps = block_size / aligned_heap_size;
+	atomic_store32(&heap->child_count, (int32_t)num_heaps - 1);
+	heap_t* extra_heap = (heap_t*)pointer_offset(heap, aligned_heap_size);
+	while (num_heaps > 1) {
+		_rpmalloc_heap_initialize(extra_heap);
+		extra_heap->master_heap = heap;
+		_rpmalloc_heap_orphan(extra_heap, 1);
+		extra_heap = (heap_t*)pointer_offset(extra_heap, aligned_heap_size);
+		--num_heaps;
+	}
+	return heap;
+}
+
+static heap_t*
+_rpmalloc_heap_extract_orphan(atomicptr_t* heap_list) {
+	void* raw_heap;
+	void* next_raw_heap;
+	uintptr_t orphan_counter;
+	heap_t* heap;
+	heap_t* next_heap;
+	do {
+		raw_heap = atomic_load_ptr(heap_list);
+		heap = (heap_t*)((uintptr_t)raw_heap & ~(uintptr_t)(HEAP_ORPHAN_ABA_SIZE - 1));
+		if (!heap)
+			break;
+		next_heap = heap->next_orphan;
+		orphan_counter = (uintptr_t)atomic_incr32(&_memory_orphan_counter);
+		next_raw_heap = (void*)((uintptr_t)next_heap | (orphan_counter & (uintptr_t)(HEAP_ORPHAN_ABA_SIZE - 1)));
+	} while (!atomic_cas_ptr(heap_list, next_raw_heap, raw_heap));
+	return heap;
+}
+
+//! Allocate a new heap, potentially reusing a previously orphaned heap
+static heap_t*
+_rpmalloc_heap_allocate(int first_class) {
+	heap_t* heap = 0;
+	if (first_class == 0)
+		heap = _rpmalloc_heap_extract_orphan(&_memory_orphan_heaps);
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	if (!heap)
+		heap = _rpmalloc_heap_extract_orphan(&_memory_first_class_orphan_heaps);
+#endif
+	if (!heap)
