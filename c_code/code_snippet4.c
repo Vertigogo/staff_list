@@ -1617,3 +1617,84 @@ _rpmalloc_heap_allocate(int first_class) {
 		heap = _rpmalloc_heap_extract_orphan(&_memory_first_class_orphan_heaps);
 #endif
 	if (!heap)
+		heap = _rpmalloc_heap_allocate_new();
+	return heap;
+}
+
+static void
+_rpmalloc_heap_release(void* heapptr, int first_class) {
+	heap_t* heap = (heap_t*)heapptr;
+	if (!heap)
+		return;
+	//Release thread cache spans back to global cache
+	_rpmalloc_heap_cache_adopt_deferred(heap, 0);
+#if ENABLE_THREAD_CACHE
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		span_t* span = heap->span_cache[iclass];
+		heap->span_cache[iclass] = 0;
+		if (span && heap->finalize) {
+			_rpmalloc_span_list_unmap_all(span);
+			continue;
+		}
+#if ENABLE_GLOBAL_CACHE
+		while (span) {
+			assert(span->span_count == (iclass + 1));
+			size_t release_count = (!iclass ? _memory_span_release_count : _memory_span_release_count_large);
+			span_t* next = _rpmalloc_span_list_split(span, (uint32_t)release_count);
+			_rpmalloc_stat_add64(&heap->thread_to_global, (size_t)span->list_size * span->span_count * _memory_span_size);
+			_rpmalloc_stat_add(&heap->span_use[iclass].spans_to_global, span->list_size);
+			_rpmalloc_global_cache_insert_span_list(span);
+			span = next;
+		}
+#else
+		if (span)
+			_rpmalloc_span_list_unmap_all(span);
+#endif
+	}
+#endif
+
+	//Orphan the heap
+	_rpmalloc_heap_orphan(heap, first_class);
+
+	if (get_thread_heap_raw() == heap)
+		set_thread_heap(0);
+#if ENABLE_STATISTICS
+	atomic_decr32(&_memory_active_heaps);
+	assert(atomic_load32(&_memory_active_heaps) >= 0);
+#endif
+}
+
+static void
+_rpmalloc_heap_release_raw(void* heapptr) {
+	_rpmalloc_heap_release(heapptr, 0);
+}
+
+static void
+_rpmalloc_heap_finalize(heap_t* heap) {
+	if (heap->spans_reserved) {
+		span_t* span = _rpmalloc_span_map(heap, heap->spans_reserved);
+		_rpmalloc_span_unmap(span);
+		heap->spans_reserved = 0;
+	}
+
+	_rpmalloc_heap_cache_adopt_deferred(heap, 0);
+
+	for (size_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
+		span_t* span = heap->partial_span[iclass];
+		while (span) {
+			span_t* next = span->next;
+			_rpmalloc_span_finalize(heap, iclass, span, &heap->partial_span[iclass]);
+			span = next;
+		}
+		// If class still has a free list it must be a full span
+		if (heap->free_list[iclass]) {
+			span_t* class_span = (span_t*)((uintptr_t)heap->free_list[iclass] & _memory_span_mask);
+			span_t** list = 0;
+#if RPMALLOC_FIRST_CLASS_HEAPS
+			list = &heap->full_span[iclass];
+#endif
+			--heap->full_span_count;
+			if (!_rpmalloc_span_finalize(heap, iclass, class_span, list)) {
+				if (list)
+					_rpmalloc_span_double_link_list_remove(list, class_span);
+				_rpmalloc_span_double_link_list_add(&heap->partial_span[iclass], class_span);
