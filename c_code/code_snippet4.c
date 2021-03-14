@@ -1802,3 +1802,91 @@ _rpmalloc_allocate_medium(heap_t* heap, size_t size) {
 		return free_list_pop(&heap->free_list[class_idx]);
 	return _rpmalloc_allocate_from_heap_fallback(heap, class_idx);
 }
+
+//! Allocate a large sized memory block from the given heap
+static void*
+_rpmalloc_allocate_large(heap_t* heap, size_t size) {
+	assert(heap);
+	//Calculate number of needed max sized spans (including header)
+	//Since this function is never called if size > LARGE_SIZE_LIMIT
+	//the span_count is guaranteed to be <= LARGE_CLASS_COUNT
+	size += SPAN_HEADER_SIZE;
+	size_t span_count = size >> _memory_span_size_shift;
+	if (size & (_memory_span_size - 1))
+		++span_count;
+
+	//Find a span in one of the cache levels
+	span_t* span = _rpmalloc_heap_extract_new_span(heap, span_count, SIZE_CLASS_LARGE);
+	if (!span)
+		return span;
+
+	//Mark span as owned by this heap and set base data
+	assert(span->span_count == span_count);
+	span->size_class = SIZE_CLASS_LARGE;
+	span->heap = heap;
+
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	_rpmalloc_span_double_link_list_add(&heap->large_huge_span, span);
+#endif
+	++heap->full_span_count;
+
+	return pointer_offset(span, SPAN_HEADER_SIZE);
+}
+
+//! Allocate a huge block by mapping memory pages directly
+static void*
+_rpmalloc_allocate_huge(heap_t* heap, size_t size) {
+	assert(heap);
+	size += SPAN_HEADER_SIZE;
+	size_t num_pages = size >> _memory_page_size_shift;
+	if (size & (_memory_page_size - 1))
+		++num_pages;
+	size_t align_offset = 0;
+	span_t* span = (span_t*)_rpmalloc_mmap(num_pages * _memory_page_size, &align_offset);
+	if (!span)
+		return span;
+
+	//Store page count in span_count
+	span->size_class = SIZE_CLASS_HUGE;
+	span->span_count = (uint32_t)num_pages;
+	span->align_offset = (uint32_t)align_offset;
+	span->heap = heap;
+	_rpmalloc_stat_add_peak(&_huge_pages_current, num_pages, _huge_pages_peak);
+
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	_rpmalloc_span_double_link_list_add(&heap->large_huge_span, span);
+#endif
+	++heap->full_span_count;
+
+	return pointer_offset(span, SPAN_HEADER_SIZE);
+}
+
+//! Allocate a block of the given size
+static void*
+_rpmalloc_allocate(heap_t* heap, size_t size) {
+	if (EXPECTED(size <= SMALL_SIZE_LIMIT))
+		return _rpmalloc_allocate_small(heap, size);
+	else if (size <= _memory_medium_size_limit)
+		return _rpmalloc_allocate_medium(heap, size);
+	else if (size <= LARGE_SIZE_LIMIT)
+		return _rpmalloc_allocate_large(heap, size);
+	return _rpmalloc_allocate_huge(heap, size);
+}
+
+static void*
+_rpmalloc_aligned_allocate(heap_t* heap, size_t alignment, size_t size) {
+	if (alignment <= SMALL_GRANULARITY)
+		return _rpmalloc_allocate(heap, size);
+
+#if ENABLE_VALIDATE_ARGS
+	if ((size + alignment) < size) {
+		errno = EINVAL;
+		return 0;
+	}
+	if (alignment & (alignment - 1)) {
+		errno = EINVAL;
+		return 0;
+	}
+#endif
+
+	if ((alignment <= SPAN_HEADER_SIZE) && (size < _memory_medium_size_limit)) {
