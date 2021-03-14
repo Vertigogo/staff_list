@@ -1890,3 +1890,91 @@ _rpmalloc_aligned_allocate(heap_t* heap, size_t alignment, size_t size) {
 #endif
 
 	if ((alignment <= SPAN_HEADER_SIZE) && (size < _memory_medium_size_limit)) {
+		// If alignment is less or equal to span header size (which is power of two),
+		// and size aligned to span header size multiples is less than size + alignment,
+		// then use natural alignment of blocks to provide alignment
+		size_t multiple_size = size ? (size + (SPAN_HEADER_SIZE - 1)) & ~(uintptr_t)(SPAN_HEADER_SIZE - 1) : SPAN_HEADER_SIZE;
+		assert(!(multiple_size % SPAN_HEADER_SIZE));
+		if (multiple_size <= (size + alignment))
+			return _rpmalloc_allocate(heap, multiple_size);
+	}
+
+	void* ptr = 0;
+	size_t align_mask = alignment - 1;
+	if (alignment <= _memory_page_size) {
+		ptr = _rpmalloc_allocate(heap, size + alignment);
+		if ((uintptr_t)ptr & align_mask) {
+			ptr = (void*)(((uintptr_t)ptr & ~(uintptr_t)align_mask) + alignment);
+			//Mark as having aligned blocks
+			span_t* span = (span_t*)((uintptr_t)ptr & _memory_span_mask);
+			span->flags |= SPAN_FLAG_ALIGNED_BLOCKS;
+		}
+		return ptr;
+	}
+
+	// Fallback to mapping new pages for this request. Since pointers passed
+	// to rpfree must be able to reach the start of the span by bitmasking of
+	// the address with the span size, the returned aligned pointer from this
+	// function must be with a span size of the start of the mapped area.
+	// In worst case this requires us to loop and map pages until we get a
+	// suitable memory address. It also means we can never align to span size
+	// or greater, since the span header will push alignment more than one
+	// span size away from span start (thus causing pointer mask to give us
+	// an invalid span start on free)
+	if (alignment & align_mask) {
+		errno = EINVAL;
+		return 0;
+	}
+	if (alignment >= _memory_span_size) {
+		errno = EINVAL;
+		return 0;
+	}
+
+	size_t extra_pages = alignment / _memory_page_size;
+
+	// Since each span has a header, we will at least need one extra memory page
+	size_t num_pages = 1 + (size / _memory_page_size);
+	if (size & (_memory_page_size - 1))
+		++num_pages;
+
+	if (extra_pages > num_pages)
+		num_pages = 1 + extra_pages;
+
+	size_t original_pages = num_pages;
+	size_t limit_pages = (_memory_span_size / _memory_page_size) * 2;
+	if (limit_pages < (original_pages * 2))
+		limit_pages = original_pages * 2;
+
+	size_t mapped_size, align_offset;
+	span_t* span;
+
+retry:
+	align_offset = 0;
+	mapped_size = num_pages * _memory_page_size;
+
+	span = (span_t*)_rpmalloc_mmap(mapped_size, &align_offset);
+	if (!span) {
+		errno = ENOMEM;
+		return 0;
+	}
+	ptr = pointer_offset(span, SPAN_HEADER_SIZE);
+
+	if ((uintptr_t)ptr & align_mask)
+		ptr = (void*)(((uintptr_t)ptr & ~(uintptr_t)align_mask) + alignment);
+
+	if (((size_t)pointer_diff(ptr, span) >= _memory_span_size) ||
+	    (pointer_offset(ptr, size) > pointer_offset(span, mapped_size)) ||
+	    (((uintptr_t)ptr & _memory_span_mask) != (uintptr_t)span)) {
+		_rpmalloc_unmap(span, mapped_size, align_offset, mapped_size);
+		++num_pages;
+		if (num_pages > limit_pages) {
+			errno = EINVAL;
+			return 0;
+		}
+		goto retry;
+	}
+
+	//Store page count in span_count
+	span->size_class = SIZE_CLASS_HUGE;
+	span->span_count = (uint32_t)num_pages;
+	span->align_offset = (uint32_t)align_offset;
