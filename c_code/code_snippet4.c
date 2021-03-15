@@ -1978,3 +1978,83 @@ retry:
 	span->size_class = SIZE_CLASS_HUGE;
 	span->span_count = (uint32_t)num_pages;
 	span->align_offset = (uint32_t)align_offset;
+	span->heap = heap;
+	_rpmalloc_stat_add_peak(&_huge_pages_current, num_pages, _huge_pages_peak);
+
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	_rpmalloc_span_double_link_list_add(&heap->large_huge_span, span);
+#endif
+	++heap->full_span_count;
+
+	return ptr;
+}
+
+
+////////////
+///
+/// Deallocation entry points
+///
+//////
+
+//! Deallocate the given small/medium memory block in the current thread local heap
+static void
+_rpmalloc_deallocate_direct_small_or_medium(span_t* span, void* block) {
+	heap_t* heap = span->heap;
+	assert(heap->owner_thread == get_thread_id() || !heap->owner_thread || heap->finalize);
+	//Add block to free list
+	if (UNEXPECTED(_rpmalloc_span_is_fully_utilized(span))) {
+		span->used_count = span->block_count;
+#if RPMALLOC_FIRST_CLASS_HEAPS
+		_rpmalloc_span_double_link_list_remove(&heap->full_span[span->size_class], span);
+#endif
+		_rpmalloc_span_double_link_list_add(&heap->partial_span[span->size_class], span);
+		--heap->full_span_count;
+	}
+	--span->used_count;
+	*((void**)block) = span->free_list;
+	span->free_list = block;
+	if (UNEXPECTED(span->used_count == span->list_size)) {
+		_rpmalloc_span_double_link_list_remove(&heap->partial_span[span->size_class], span);
+		_rpmalloc_span_release_to_cache(heap, span);
+	}
+}
+
+static void
+_rpmalloc_deallocate_defer_free_span(heap_t* heap, span_t* span) {
+	//This list does not need ABA protection, no mutable side state
+	do {
+		span->free_list = atomic_load_ptr(&heap->span_free_deferred);
+	} while (!atomic_cas_ptr(&heap->span_free_deferred, span, span->free_list));
+}
+
+//! Put the block in the deferred free list of the owning span
+static void
+_rpmalloc_deallocate_defer_small_or_medium(span_t* span, void* block) {
+	// The memory ordering here is a bit tricky, to avoid having to ABA protect
+	// the deferred free list to avoid desynchronization of list and list size
+	// we need to have acquire semantics on successful CAS of the pointer to
+	// guarantee the list_size variable validity + release semantics on pointer store
+	void* free_list;
+	do {
+		free_list = atomic_load_ptr(&span->free_list_deferred);
+		*((void**)block) = free_list;
+	} while ((free_list == INVALID_POINTER) || !atomic_cas_ptr_acquire(&span->free_list_deferred, INVALID_POINTER, free_list));
+	uint32_t free_count = ++span->list_size;
+	atomic_store_ptr_release(&span->free_list_deferred, block);
+	if (free_count == span->block_count) {
+		// Span was completely freed by this block. Due to the INVALID_POINTER spin lock
+		// no other thread can reach this state simultaneously on this span.
+		// Safe to move to owner heap deferred cache
+		_rpmalloc_deallocate_defer_free_span(span->heap, span);
+	}
+}
+
+static void
+_rpmalloc_deallocate_small_or_medium(span_t* span, void* p) {
+	_rpmalloc_stat_inc_free(span->heap, span->size_class);
+	if (span->flags & SPAN_FLAG_ALIGNED_BLOCKS) {
+		//Realign pointer to block start
+		void* blocks_start = pointer_offset(span, SPAN_HEADER_SIZE);
+		uint32_t block_offset = (uint32_t)pointer_diff(p, blocks_start);
+		p = pointer_offset(p, -(int32_t)(block_offset % span->block_size));
+	}
