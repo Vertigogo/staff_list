@@ -2156,3 +2156,99 @@ _rpmalloc_deallocate(void* p) {
 	else
 		_rpmalloc_deallocate_huge(span);
 }
+
+
+////////////
+///
+/// Reallocation entry points
+///
+//////
+
+static size_t
+_rpmalloc_usable_size(void* p);
+
+//! Reallocate the given block to the given size
+static void*
+_rpmalloc_reallocate(heap_t* heap, void* p, size_t size, size_t oldsize, unsigned int flags) {
+	if (p) {
+		//Grab the span using guaranteed span alignment
+		span_t* span = (span_t*)((uintptr_t)p & _memory_span_mask);
+		if (EXPECTED(span->size_class < SIZE_CLASS_COUNT)) {
+			//Small/medium sized block
+			assert(span->span_count == 1);
+			void* blocks_start = pointer_offset(span, SPAN_HEADER_SIZE);
+			uint32_t block_offset = (uint32_t)pointer_diff(p, blocks_start);
+			uint32_t block_idx = block_offset / span->block_size;
+			void* block = pointer_offset(blocks_start, (size_t)block_idx * span->block_size);
+			if (!oldsize)
+				oldsize = (size_t)((ptrdiff_t)span->block_size - pointer_diff(p, block));
+			if ((size_t)span->block_size >= size) {
+				//Still fits in block, never mind trying to save memory, but preserve data if alignment changed
+				if ((p != block) && !(flags & RPMALLOC_NO_PRESERVE))
+					memmove(block, p, oldsize);
+				return block;
+			}
+		} else if (span->size_class == SIZE_CLASS_LARGE) {
+			//Large block
+			size_t total_size = size + SPAN_HEADER_SIZE;
+			size_t num_spans = total_size >> _memory_span_size_shift;
+			if (total_size & (_memory_span_mask - 1))
+				++num_spans;
+			size_t current_spans = span->span_count;
+			void* block = pointer_offset(span, SPAN_HEADER_SIZE);
+			if (!oldsize)
+				oldsize = (current_spans * _memory_span_size) - (size_t)pointer_diff(p, block) - SPAN_HEADER_SIZE;
+			if ((current_spans >= num_spans) && (num_spans >= (current_spans / 2))) {
+				//Still fits in block, never mind trying to save memory, but preserve data if alignment changed
+				if ((p != block) && !(flags & RPMALLOC_NO_PRESERVE))
+					memmove(block, p, oldsize);
+				return block;
+			}
+		} else {
+			//Oversized block
+			size_t total_size = size + SPAN_HEADER_SIZE;
+			size_t num_pages = total_size >> _memory_page_size_shift;
+			if (total_size & (_memory_page_size - 1))
+				++num_pages;
+			//Page count is stored in span_count
+			size_t current_pages = span->span_count;
+			void* block = pointer_offset(span, SPAN_HEADER_SIZE);
+			if (!oldsize)
+				oldsize = (current_pages * _memory_page_size) - (size_t)pointer_diff(p, block) - SPAN_HEADER_SIZE;
+			if ((current_pages >= num_pages) && (num_pages >= (current_pages / 2))) {
+				//Still fits in block, never mind trying to save memory, but preserve data if alignment changed
+				if ((p != block) && !(flags & RPMALLOC_NO_PRESERVE))
+					memmove(block, p, oldsize);
+				return block;
+			}
+		}
+	} else {
+		oldsize = 0;
+	}
+
+	if (!!(flags & RPMALLOC_GROW_OR_FAIL))
+		return 0;
+
+	//Size is greater than block size, need to allocate a new block and deallocate the old
+	//Avoid hysteresis by overallocating if increase is small (below 37%)
+	size_t lower_bound = oldsize + (oldsize >> 2) + (oldsize >> 3);
+	size_t new_size = (size > lower_bound) ? size : ((size > oldsize) ? lower_bound : size);
+	void* block = _rpmalloc_allocate(heap, new_size);
+	if (p && block) {
+		if (!(flags & RPMALLOC_NO_PRESERVE))
+			memcpy(block, p, oldsize < new_size ? oldsize : new_size);
+		_rpmalloc_deallocate(p);
+	}
+
+	return block;
+}
+
+static void*
+_rpmalloc_aligned_reallocate(heap_t* heap, void* ptr, size_t alignment, size_t size, size_t oldsize,
+                           unsigned int flags) {
+	if (alignment <= SMALL_GRANULARITY)
+		return _rpmalloc_reallocate(heap, ptr, size, oldsize, flags);
+
+	int no_alloc = !!(flags & RPMALLOC_GROW_OR_FAIL);
+	size_t usablesize = _rpmalloc_usable_size(ptr);
+	if ((usablesize >= size) && !((uintptr_t)ptr & (alignment - 1))) {
