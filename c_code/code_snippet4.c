@@ -2058,3 +2058,101 @@ _rpmalloc_deallocate_small_or_medium(span_t* span, void* p) {
 		uint32_t block_offset = (uint32_t)pointer_diff(p, blocks_start);
 		p = pointer_offset(p, -(int32_t)(block_offset % span->block_size));
 	}
+	//Check if block belongs to this heap or if deallocation should be deferred
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	int defer = (span->heap->owner_thread && (span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
+#else
+	int defer = ((span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
+#endif
+	if (!defer)
+		_rpmalloc_deallocate_direct_small_or_medium(span, p);
+	else
+		_rpmalloc_deallocate_defer_small_or_medium(span, p);
+}
+
+//! Deallocate the given large memory block to the current heap
+static void
+_rpmalloc_deallocate_large(span_t* span) {
+	assert(span->size_class == SIZE_CLASS_LARGE);
+	assert(!(span->flags & SPAN_FLAG_MASTER) || !(span->flags & SPAN_FLAG_SUBSPAN));
+	assert((span->flags & SPAN_FLAG_MASTER) || (span->flags & SPAN_FLAG_SUBSPAN));
+	//We must always defer (unless finalizing) if from another heap since we cannot touch the list or counters of another heap
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	int defer = (span->heap->owner_thread && (span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
+#else
+	int defer = ((span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
+#endif
+	if (defer) {
+		_rpmalloc_deallocate_defer_free_span(span->heap, span);
+		return;
+	}
+	assert(span->heap->full_span_count);
+	--span->heap->full_span_count;
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	_rpmalloc_span_double_link_list_remove(&span->heap->large_huge_span, span);
+#endif
+#if ENABLE_ADAPTIVE_THREAD_CACHE || ENABLE_STATISTICS
+	//Decrease counter
+	size_t idx = span->span_count - 1;
+	atomic_decr32(&span->heap->span_use[idx].current);
+#endif
+	heap_t* heap = get_thread_heap();
+	assert(heap);
+	span->heap = heap;
+	if ((span->span_count > 1) && !heap->finalize && !heap->spans_reserved) {
+		heap->span_reserve = span;
+		heap->spans_reserved = span->span_count;
+		if (span->flags & SPAN_FLAG_MASTER) {
+			heap->span_reserve_master = span;
+		} else { //SPAN_FLAG_SUBSPAN
+			span_t* master = (span_t*)pointer_offset(span, -(intptr_t)((size_t)span->offset_from_master * _memory_span_size));
+			heap->span_reserve_master = master;
+			assert(master->flags & SPAN_FLAG_MASTER);
+			assert(atomic_load32(&master->remaining_spans) >= (int32_t)span->span_count);
+		}
+		_rpmalloc_stat_inc(&heap->span_use[idx].spans_to_reserved);
+	} else {
+		//Insert into cache list
+		_rpmalloc_heap_cache_insert(heap, span);
+	}
+}
+
+//! Deallocate the given huge span
+static void
+_rpmalloc_deallocate_huge(span_t* span) {
+	assert(span->heap);
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	int defer = (span->heap->owner_thread && (span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
+#else
+	int defer = ((span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
+#endif
+	if (defer) {
+		_rpmalloc_deallocate_defer_free_span(span->heap, span);
+		return;
+	}
+	assert(span->heap->full_span_count);
+	--span->heap->full_span_count;
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	_rpmalloc_span_double_link_list_remove(&span->heap->large_huge_span, span);
+#endif
+
+	//Oversized allocation, page count is stored in span_count
+	size_t num_pages = span->span_count;
+	_rpmalloc_unmap(span, num_pages * _memory_page_size, span->align_offset, num_pages * _memory_page_size);
+	_rpmalloc_stat_sub(&_huge_pages_current, num_pages);
+}
+
+//! Deallocate the given block
+static void
+_rpmalloc_deallocate(void* p) {
+	//Grab the span (always at start of span, using span alignment)
+	span_t* span = (span_t*)((uintptr_t)p & _memory_span_mask);
+	if (UNEXPECTED(!span))
+		return;
+	if (EXPECTED(span->size_class < SIZE_CLASS_COUNT))
+		_rpmalloc_deallocate_small_or_medium(span, p);
+	else if (span->size_class == SIZE_CLASS_LARGE)
+		_rpmalloc_deallocate_large(span);
+	else
+		_rpmalloc_deallocate_huge(span);
+}
