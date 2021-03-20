@@ -2347,3 +2347,81 @@ rpmalloc_initialize_config(const rpmalloc_config_t* config) {
 #if RPMALLOC_CONFIGURABLE
 	_memory_page_size = _memory_config.page_size;
 #else
+	_memory_page_size = 0;
+#endif
+	_memory_huge_pages = 0;
+	_memory_map_granularity = _memory_page_size;
+	if (!_memory_page_size) {
+#if PLATFORM_WINDOWS
+		SYSTEM_INFO system_info;
+		memset(&system_info, 0, sizeof(system_info));
+		GetSystemInfo(&system_info);
+		_memory_page_size = system_info.dwPageSize;
+		_memory_map_granularity = system_info.dwAllocationGranularity;
+#else
+		_memory_page_size = (size_t)sysconf(_SC_PAGESIZE);
+		_memory_map_granularity = _memory_page_size;
+		if (_memory_config.enable_huge_pages) {
+#if defined(__linux__)
+			size_t huge_page_size = 0;
+			FILE* meminfo = fopen("/proc/meminfo", "r");
+			if (meminfo) {
+				char line[128];
+				while (!huge_page_size && fgets(line, sizeof(line) - 1, meminfo)) {
+					line[sizeof(line) - 1] = 0;
+					if (strstr(line, "Hugepagesize:"))
+						huge_page_size = (size_t)strtol(line + 13, 0, 10) * 1024;
+				}
+				fclose(meminfo);
+			}
+			if (huge_page_size) {
+				_memory_huge_pages = 1;
+				_memory_page_size = huge_page_size;
+				_memory_map_granularity = huge_page_size;
+			}
+#elif defined(__FreeBSD__)
+			int rc;
+			size_t sz = sizeof(rc);
+
+			if (sysctlbyname("vm.pmap.pg_ps_enabled", &rc, &sz, NULL, 0) == 0 && rc == 1) {
+				_memory_huge_pages = 1;
+				_memory_page_size = 2 * 1024 * 1024;
+				_memory_map_granularity = _memory_page_size;
+			}
+#elif defined(__APPLE__)
+			_memory_huge_pages = 1;
+			_memory_page_size = 2 * 1024 * 1024;
+			_memory_map_granularity = _memory_page_size;
+#endif
+		}
+#endif
+	} else {
+		if (_memory_config.enable_huge_pages)
+			_memory_huge_pages = 1;
+	}
+
+#if PLATFORM_WINDOWS
+	if (_memory_config.enable_huge_pages) {
+		HANDLE token = 0;
+		size_t large_page_minimum = GetLargePageMinimum();
+		if (large_page_minimum)
+			OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
+		if (token) {
+			LUID luid;
+			if (LookupPrivilegeValue(0, SE_LOCK_MEMORY_NAME, &luid)) {
+				TOKEN_PRIVILEGES token_privileges;
+				memset(&token_privileges, 0, sizeof(token_privileges));
+				token_privileges.PrivilegeCount = 1;
+				token_privileges.Privileges[0].Luid = luid;
+				token_privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+				if (AdjustTokenPrivileges(token, FALSE, &token_privileges, 0, 0, 0)) {
+					DWORD err = GetLastError();
+					if (err == ERROR_SUCCESS) {
+						_memory_huge_pages = 1;
+						if (large_page_minimum > _memory_page_size)
+						 	_memory_page_size = large_page_minimum;
+						if (large_page_minimum > _memory_map_granularity)
+							_memory_map_granularity = large_page_minimum;
+					}
+				}
+			}
