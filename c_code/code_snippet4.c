@@ -2252,3 +2252,98 @@ _rpmalloc_aligned_reallocate(heap_t* heap, void* ptr, size_t alignment, size_t s
 	int no_alloc = !!(flags & RPMALLOC_GROW_OR_FAIL);
 	size_t usablesize = _rpmalloc_usable_size(ptr);
 	if ((usablesize >= size) && !((uintptr_t)ptr & (alignment - 1))) {
+		if (no_alloc || (size >= (usablesize / 2)))
+			return ptr;
+	}
+	// Aligned alloc marks span as having aligned blocks
+	void* block = (!no_alloc ? _rpmalloc_aligned_allocate(heap, alignment, size) : 0);
+	if (EXPECTED(block != 0)) {
+		if (!(flags & RPMALLOC_NO_PRESERVE) && ptr) {
+			if (!oldsize)
+				oldsize = usablesize;
+			memcpy(block, ptr, oldsize < size ? oldsize : size);
+		}
+		_rpmalloc_deallocate(ptr);
+	}
+	return block;
+}
+
+
+////////////
+///
+/// Initialization, finalization and utility
+///
+//////
+
+//! Get the usable size of the given block
+static size_t
+_rpmalloc_usable_size(void* p) {
+	//Grab the span using guaranteed span alignment
+	span_t* span = (span_t*)((uintptr_t)p & _memory_span_mask);
+	if (span->size_class < SIZE_CLASS_COUNT) {
+		//Small/medium block
+		void* blocks_start = pointer_offset(span, SPAN_HEADER_SIZE);
+		return span->block_size - ((size_t)pointer_diff(p, blocks_start) % span->block_size);
+	}
+	if (span->size_class == SIZE_CLASS_LARGE) {
+		//Large block
+		size_t current_spans = span->span_count;
+		return (current_spans * _memory_span_size) - (size_t)pointer_diff(p, span);
+	}
+	//Oversized block, page count is stored in span_count
+	size_t current_pages = span->span_count;
+	return (current_pages * _memory_page_size) - (size_t)pointer_diff(p, span);
+}
+
+//! Adjust and optimize the size class properties for the given class
+static void
+_rpmalloc_adjust_size_class(size_t iclass) {
+	size_t block_size = _memory_size_class[iclass].block_size;
+	size_t block_count = (_memory_span_size - SPAN_HEADER_SIZE) / block_size;
+
+	_memory_size_class[iclass].block_count = (uint16_t)block_count;
+	_memory_size_class[iclass].class_idx = (uint16_t)iclass;
+
+	//Check if previous size classes can be merged
+	size_t prevclass = iclass;
+	while (prevclass > 0) {
+		--prevclass;
+		//A class can be merged if number of pages and number of blocks are equal
+		if (_memory_size_class[prevclass].block_count == _memory_size_class[iclass].block_count)
+			memcpy(_memory_size_class + prevclass, _memory_size_class + iclass, sizeof(_memory_size_class[iclass]));
+		else
+			break;
+	}
+}
+
+//! Initialize the allocator and setup global data
+extern inline int
+rpmalloc_initialize(void) {
+	if (_rpmalloc_initialized) {
+		rpmalloc_thread_initialize();
+		return 0;
+	}
+	return rpmalloc_initialize_config(0);
+}
+
+int
+rpmalloc_initialize_config(const rpmalloc_config_t* config) {
+	if (_rpmalloc_initialized) {
+		rpmalloc_thread_initialize();
+		return 0;
+	}
+	_rpmalloc_initialized = 1;
+
+	if (config)
+		memcpy(&_memory_config, config, sizeof(rpmalloc_config_t));
+	else
+		memset(&_memory_config, 0, sizeof(rpmalloc_config_t));
+
+	if (!_memory_config.memory_map || !_memory_config.memory_unmap) {
+		_memory_config.memory_map = _rpmalloc_mmap_os;
+		_memory_config.memory_unmap = _rpmalloc_unmap_os;
+	}
+
+#if RPMALLOC_CONFIGURABLE
+	_memory_page_size = _memory_config.page_size;
+#else
