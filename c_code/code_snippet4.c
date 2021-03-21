@@ -2425,3 +2425,78 @@ rpmalloc_initialize_config(const rpmalloc_config_t* config) {
 					}
 				}
 			}
+			CloseHandle(token);
+		}
+	}
+#endif
+
+	//The ABA counter in heap orphan list is tied to using HEAP_ORPHAN_ABA_SIZE
+	size_t min_span_size = HEAP_ORPHAN_ABA_SIZE;
+	size_t max_page_size;
+#if UINTPTR_MAX > 0xFFFFFFFF
+	max_page_size = 4096ULL * 1024ULL * 1024ULL;
+#else
+	max_page_size = 4 * 1024 * 1024;
+#endif
+	if (_memory_page_size < min_span_size)
+		_memory_page_size = min_span_size;
+	if (_memory_page_size > max_page_size)
+		_memory_page_size = max_page_size;
+	_memory_page_size_shift = 0;
+	size_t page_size_bit = _memory_page_size;
+	while (page_size_bit != 1) {
+		++_memory_page_size_shift;
+		page_size_bit >>= 1;
+	}
+	_memory_page_size = ((size_t)1 << _memory_page_size_shift);
+
+#if RPMALLOC_CONFIGURABLE
+	size_t span_size = _memory_config.span_size;
+	if (!span_size)
+		span_size = (64 * 1024);
+	if (span_size > (256 * 1024))
+		span_size = (256 * 1024);
+	_memory_span_size = 4096;
+	_memory_span_size_shift = 12;
+	while (_memory_span_size < span_size) {
+		_memory_span_size <<= 1;
+		++_memory_span_size_shift;
+	}
+	_memory_span_mask = ~(uintptr_t)(_memory_span_size - 1);
+#endif
+
+	_memory_span_map_count = ( _memory_config.span_map_count ? _memory_config.span_map_count : DEFAULT_SPAN_MAP_COUNT);
+	if ((_memory_span_size * _memory_span_map_count) < _memory_page_size)
+		_memory_span_map_count = (_memory_page_size / _memory_span_size);
+	if ((_memory_page_size >= _memory_span_size) && ((_memory_span_map_count * _memory_span_size) % _memory_page_size))
+		_memory_span_map_count = (_memory_page_size / _memory_span_size);
+
+	_memory_config.page_size = _memory_page_size;
+	_memory_config.span_size = _memory_span_size;
+	_memory_config.span_map_count = _memory_span_map_count;
+	_memory_config.enable_huge_pages = _memory_huge_pages;
+
+	_memory_span_release_count = (_memory_span_map_count > 4 ? ((_memory_span_map_count < 64) ? _memory_span_map_count : 64) : 4);
+	_memory_span_release_count_large = (_memory_span_release_count > 8 ? (_memory_span_release_count / 4) : 2);
+
+#if (defined(__APPLE__) || defined(__HAIKU__)) && ENABLE_PRELOAD
+	if (pthread_key_create(&_memory_thread_heap, _memory_heap_release_raw))
+		return -1;
+#endif
+#if defined(_WIN32) && (!defined(BUILD_DYNAMIC_LINK) || !BUILD_DYNAMIC_LINK)
+    fls_key = FlsAlloc(&_rpmalloc_thread_destructor);
+#endif
+
+	//Setup all small and medium size classes
+	size_t iclass = 0;
+	_memory_size_class[iclass].block_size = SMALL_GRANULARITY;
+	_rpmalloc_adjust_size_class(iclass);
+	for (iclass = 1; iclass < SMALL_CLASS_COUNT; ++iclass) {
+		size_t size = iclass * SMALL_GRANULARITY;
+		_memory_size_class[iclass].block_size = (uint32_t)size;
+		_rpmalloc_adjust_size_class(iclass);
+	}
+	//At least two blocks per span, then fall back to large allocations
+	_memory_medium_size_limit = (_memory_span_size - SPAN_HEADER_SIZE) >> 1;
+	if (_memory_medium_size_limit > MEDIUM_SIZE_LIMIT)
+		_memory_medium_size_limit = MEDIUM_SIZE_LIMIT;
