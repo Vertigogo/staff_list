@@ -2500,3 +2500,65 @@ rpmalloc_initialize_config(const rpmalloc_config_t* config) {
 	_memory_medium_size_limit = (_memory_span_size - SPAN_HEADER_SIZE) >> 1;
 	if (_memory_medium_size_limit > MEDIUM_SIZE_LIMIT)
 		_memory_medium_size_limit = MEDIUM_SIZE_LIMIT;
+	for (iclass = 0; iclass < MEDIUM_CLASS_COUNT; ++iclass) {
+		size_t size = SMALL_SIZE_LIMIT + ((iclass + 1) * MEDIUM_GRANULARITY);
+		if (size > _memory_medium_size_limit)
+			break;
+		_memory_size_class[SMALL_CLASS_COUNT + iclass].block_size = (uint32_t)size;
+		_rpmalloc_adjust_size_class(SMALL_CLASS_COUNT + iclass);
+	}
+
+	atomic_store_ptr(&_memory_orphan_heaps, 0);
+#if RPMALLOC_FIRST_CLASS_HEAPS
+	atomic_store_ptr(&_memory_first_class_orphan_heaps, 0);
+#endif
+	for (size_t ilist = 0, lsize = (sizeof(_memory_heaps) / sizeof(_memory_heaps[0])); ilist < lsize; ++ilist)
+		atomic_store_ptr(&_memory_heaps[ilist], 0);
+
+	//Initialize this thread
+	rpmalloc_thread_initialize();
+	return 0;
+}
+
+//! Finalize the allocator
+void
+rpmalloc_finalize(void) {
+	rpmalloc_thread_finalize();
+	//rpmalloc_dump_statistics(stderr);
+
+	//Free all thread caches and fully free spans
+	for (size_t list_idx = 0; list_idx < HEAP_ARRAY_SIZE; ++list_idx) {
+		heap_t* heap = (heap_t*)atomic_load_ptr(&_memory_heaps[list_idx]);
+		while (heap) {
+			heap_t* next_heap = heap->next_heap;
+			heap->finalize = 1;
+			_rpmalloc_heap_global_finalize(heap);
+			heap = next_heap;
+		}
+	}
+
+#if ENABLE_GLOBAL_CACHE
+	//Free global caches
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass)
+		_rpmalloc_global_cache_finalize(&_memory_span_cache[iclass]);
+#endif
+
+#if (defined(__APPLE__) || defined(__HAIKU__)) && ENABLE_PRELOAD
+	pthread_key_delete(_memory_thread_heap);
+#endif
+#if defined(_WIN32) && (!defined(BUILD_DYNAMIC_LINK) || !BUILD_DYNAMIC_LINK)
+	FlsFree(fls_key);
+	fls_key = 0;
+#endif
+#if ENABLE_STATISTICS
+	//If you hit these asserts you probably have memory leaks (perhaps global scope data doing dynamic allocations) or double frees in your code
+	assert(!atomic_load32(&_mapped_pages));
+	assert(!atomic_load32(&_reserved_spans));
+	assert(!atomic_load32(&_mapped_pages_os));
+#endif
+
+	_rpmalloc_initialized = 0;
+}
+
+//! Initialize thread, assign heap
+extern inline void
