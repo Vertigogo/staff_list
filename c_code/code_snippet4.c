@@ -2650,3 +2650,93 @@ rprealloc(void* ptr, size_t size) {
 		errno = EINVAL;
 		return ptr;
 	}
+#endif
+	heap_t* heap = get_thread_heap();
+	return _rpmalloc_reallocate(heap, ptr, size, 0, 0);
+}
+
+extern RPMALLOC_ALLOCATOR void*
+rpaligned_realloc(void* ptr, size_t alignment, size_t size, size_t oldsize,
+                  unsigned int flags) {
+#if ENABLE_VALIDATE_ARGS
+	if ((size + alignment < size) || (alignment > _memory_page_size)) {
+		errno = EINVAL;
+		return 0;
+	}
+#endif
+	heap_t* heap = get_thread_heap();
+	return _rpmalloc_aligned_reallocate(heap, ptr, alignment, size, oldsize, flags);
+}
+
+extern RPMALLOC_ALLOCATOR void*
+rpaligned_alloc(size_t alignment, size_t size) {
+	heap_t* heap = get_thread_heap();
+	return _rpmalloc_aligned_allocate(heap, alignment, size);
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpaligned_calloc(size_t alignment, size_t num, size_t size) {
+	size_t total;
+#if ENABLE_VALIDATE_ARGS
+#if PLATFORM_WINDOWS
+	int err = SizeTMult(num, size, &total);
+	if ((err != S_OK) || (total >= MAX_ALLOC_SIZE)) {
+		errno = EINVAL;
+		return 0;
+	}
+#else
+	int err = __builtin_umull_overflow(num, size, &total);
+	if (err || (total >= MAX_ALLOC_SIZE)) {
+		errno = EINVAL;
+		return 0;
+	}
+#endif
+#else
+	total = num * size;
+#endif
+	void* block = rpaligned_alloc(alignment, total);
+	if (block)
+		memset(block, 0, total);
+	return block;
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpmemalign(size_t alignment, size_t size) {
+	return rpaligned_alloc(alignment, size);
+}
+
+extern inline int
+rpposix_memalign(void **memptr, size_t alignment, size_t size) {
+	if (memptr)
+		*memptr = rpaligned_alloc(alignment, size);
+	else
+		return EINVAL;
+	return *memptr ? 0 : ENOMEM;
+}
+
+extern inline size_t
+rpmalloc_usable_size(void* ptr) {
+	return (ptr ? _rpmalloc_usable_size(ptr) : 0);
+}
+
+extern inline void
+rpmalloc_thread_collect(void) {
+}
+
+void
+rpmalloc_thread_statistics(rpmalloc_thread_statistics_t* stats) {
+	memset(stats, 0, sizeof(rpmalloc_thread_statistics_t));
+	heap_t* heap = get_thread_heap_raw();
+	if (!heap)
+		return;
+
+	for (size_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
+		size_class_t* size_class = _memory_size_class + iclass;
+		span_t* span = heap->partial_span[iclass];
+		while (span) {
+			size_t free_count = span->list_size;
+			size_t block_count = size_class->block_count;
+			if (span->free_list_limit < block_count)
+				block_count = span->free_list_limit;
+			free_count += (block_count - span->used_count);
+			stats->sizecache = free_count * size_class->block_size;
