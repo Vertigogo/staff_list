@@ -2562,3 +2562,91 @@ rpmalloc_finalize(void) {
 
 //! Initialize thread, assign heap
 extern inline void
+rpmalloc_thread_initialize(void) {
+	if (!get_thread_heap_raw()) {
+		heap_t* heap = _rpmalloc_heap_allocate(0);
+		if (heap) {
+			_rpmalloc_stat_inc(&_memory_active_heaps);
+			set_thread_heap(heap);
+#if defined(_WIN32) && (!defined(BUILD_DYNAMIC_LINK) || !BUILD_DYNAMIC_LINK)
+			FlsSetValue(fls_key, heap);
+#endif
+		}
+	}
+}
+
+//! Finalize thread, orphan heap
+void
+rpmalloc_thread_finalize(void) {
+	heap_t* heap = get_thread_heap_raw();
+	if (heap)
+		_rpmalloc_heap_release_raw(heap);
+	set_thread_heap(0);
+#if defined(_WIN32) && (!defined(BUILD_DYNAMIC_LINK) || !BUILD_DYNAMIC_LINK)
+	FlsSetValue(fls_key, 0);
+#endif
+}
+
+int
+rpmalloc_is_thread_initialized(void) {
+	return (get_thread_heap_raw() != 0) ? 1 : 0;
+}
+
+const rpmalloc_config_t*
+rpmalloc_config(void) {
+	return &_memory_config;
+}
+
+// Extern interface
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpmalloc(size_t size) {
+#if ENABLE_VALIDATE_ARGS
+	if (size >= MAX_ALLOC_SIZE) {
+		errno = EINVAL;
+		return 0;
+	}
+#endif
+	heap_t* heap = get_thread_heap();
+	return _rpmalloc_allocate(heap, size);
+}
+
+extern inline void
+rpfree(void* ptr) {
+	_rpmalloc_deallocate(ptr);
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpcalloc(size_t num, size_t size) {
+	size_t total;
+#if ENABLE_VALIDATE_ARGS
+#if PLATFORM_WINDOWS
+	int err = SizeTMult(num, size, &total);
+	if ((err != S_OK) || (total >= MAX_ALLOC_SIZE)) {
+		errno = EINVAL;
+		return 0;
+	}
+#else
+	int err = __builtin_umull_overflow(num, size, &total);
+	if (err || (total >= MAX_ALLOC_SIZE)) {
+		errno = EINVAL;
+		return 0;
+	}
+#endif
+#else
+	total = num * size;
+#endif
+	heap_t* heap = get_thread_heap();
+	void* block = _rpmalloc_allocate(heap, total);
+	if (block)
+		memset(block, 0, total);
+	return block;
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rprealloc(void* ptr, size_t size) {
+#if ENABLE_VALIDATE_ARGS
+	if (size >= MAX_ALLOC_SIZE) {
+		errno = EINVAL;
+		return ptr;
+	}
