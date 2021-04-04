@@ -2740,3 +2740,91 @@ rpmalloc_thread_statistics(rpmalloc_thread_statistics_t* stats) {
 				block_count = span->free_list_limit;
 			free_count += (block_count - span->used_count);
 			stats->sizecache = free_count * size_class->block_size;
+			span = span->next;
+		}
+	}
+
+#if ENABLE_THREAD_CACHE
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		if (heap->span_cache[iclass])
+			stats->spancache = (size_t)heap->span_cache[iclass]->list_size * (iclass + 1) * _memory_span_size;
+	}
+#endif
+
+	span_t* deferred = (span_t*)atomic_load_ptr(&heap->span_free_deferred);
+	while (deferred) {
+		if (deferred->size_class != SIZE_CLASS_HUGE)
+			stats->spancache = (size_t)deferred->span_count * _memory_span_size;
+		deferred = (span_t*)deferred->free_list;
+	}
+
+#if ENABLE_STATISTICS
+	stats->thread_to_global = (size_t)atomic_load64(&heap->thread_to_global);
+	stats->global_to_thread = (size_t)atomic_load64(&heap->global_to_thread);
+
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		stats->span_use[iclass].current = (size_t)atomic_load32(&heap->span_use[iclass].current);
+		stats->span_use[iclass].peak = (size_t)atomic_load32(&heap->span_use[iclass].high);
+		stats->span_use[iclass].to_global = (size_t)atomic_load32(&heap->span_use[iclass].spans_to_global);
+		stats->span_use[iclass].from_global = (size_t)atomic_load32(&heap->span_use[iclass].spans_from_global);
+		stats->span_use[iclass].to_cache = (size_t)atomic_load32(&heap->span_use[iclass].spans_to_cache);
+		stats->span_use[iclass].from_cache = (size_t)atomic_load32(&heap->span_use[iclass].spans_from_cache);
+		stats->span_use[iclass].to_reserved = (size_t)atomic_load32(&heap->span_use[iclass].spans_to_reserved);
+		stats->span_use[iclass].from_reserved = (size_t)atomic_load32(&heap->span_use[iclass].spans_from_reserved);
+		stats->span_use[iclass].map_calls = (size_t)atomic_load32(&heap->span_use[iclass].spans_map_calls);
+	}
+	for (size_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
+		stats->size_use[iclass].alloc_current = (size_t)atomic_load32(&heap->size_class_use[iclass].alloc_current);
+		stats->size_use[iclass].alloc_peak = (size_t)heap->size_class_use[iclass].alloc_peak;
+		stats->size_use[iclass].alloc_total = (size_t)atomic_load32(&heap->size_class_use[iclass].alloc_total);
+		stats->size_use[iclass].free_total = (size_t)atomic_load32(&heap->size_class_use[iclass].free_total);
+		stats->size_use[iclass].spans_to_cache = (size_t)atomic_load32(&heap->size_class_use[iclass].spans_to_cache);
+		stats->size_use[iclass].spans_from_cache = (size_t)atomic_load32(&heap->size_class_use[iclass].spans_from_cache);
+		stats->size_use[iclass].spans_from_reserved = (size_t)atomic_load32(&heap->size_class_use[iclass].spans_from_reserved);
+		stats->size_use[iclass].map_calls = (size_t)atomic_load32(&heap->size_class_use[iclass].spans_map_calls);
+	}
+#endif
+}
+
+void
+rpmalloc_global_statistics(rpmalloc_global_statistics_t* stats) {
+	memset(stats, 0, sizeof(rpmalloc_global_statistics_t));
+#if ENABLE_STATISTICS
+	stats->mapped = (size_t)atomic_load32(&_mapped_pages) * _memory_page_size;
+	stats->mapped_peak = (size_t)_mapped_pages_peak * _memory_page_size;
+	stats->mapped_total = (size_t)atomic_load32(&_mapped_total) * _memory_page_size;
+	stats->unmapped_total = (size_t)atomic_load32(&_unmapped_total) * _memory_page_size;
+	stats->huge_alloc = (size_t)atomic_load32(&_huge_pages_current) * _memory_page_size;
+	stats->huge_alloc_peak = (size_t)_huge_pages_peak * _memory_page_size;
+#endif
+#if ENABLE_GLOBAL_CACHE
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		stats->cached += (size_t)atomic_load32(&_memory_span_cache[iclass].size) * (iclass + 1) * _memory_span_size;
+	}
+#endif
+}
+
+#if ENABLE_STATISTICS
+
+static void
+_memory_heap_dump_statistics(heap_t* heap, void* file) {
+	fprintf(file, "Heap %d stats:\n", heap->id);
+	fprintf(file, "Class   CurAlloc  PeakAlloc   TotAlloc    TotFree  BlkSize BlkCount SpansCur SpansPeak  PeakAllocMiB  ToCacheMiB FromCacheMiB FromReserveMiB MmapCalls\n");
+	for (size_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
+		if (!atomic_load32(&heap->size_class_use[iclass].alloc_total))
+			continue;
+		fprintf(file, "%3u:  %10u %10u %10u %10u %8u %8u %8d %9d %13zu %11zu %12zu %14zu %9u\n", (uint32_t)iclass,
+			atomic_load32(&heap->size_class_use[iclass].alloc_current),
+			heap->size_class_use[iclass].alloc_peak,
+			atomic_load32(&heap->size_class_use[iclass].alloc_total),
+			atomic_load32(&heap->size_class_use[iclass].free_total),
+			_memory_size_class[iclass].block_size,
+			_memory_size_class[iclass].block_count,
+			atomic_load32(&heap->size_class_use[iclass].spans_current),
+			heap->size_class_use[iclass].spans_peak,
+			((size_t)heap->size_class_use[iclass].alloc_peak * (size_t)_memory_size_class[iclass].block_size) / (size_t)(1024 * 1024),
+			((size_t)atomic_load32(&heap->size_class_use[iclass].spans_to_cache) * _memory_span_size) / (size_t)(1024 * 1024),
+			((size_t)atomic_load32(&heap->size_class_use[iclass].spans_from_cache) * _memory_span_size) / (size_t)(1024 * 1024),
+			((size_t)atomic_load32(&heap->size_class_use[iclass].spans_from_reserved) * _memory_span_size) / (size_t)(1024 * 1024),
+			atomic_load32(&heap->size_class_use[iclass].spans_map_calls));
+	}
