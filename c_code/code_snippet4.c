@@ -2828,3 +2828,89 @@ _memory_heap_dump_statistics(heap_t* heap, void* file) {
 			((size_t)atomic_load32(&heap->size_class_use[iclass].spans_from_reserved) * _memory_span_size) / (size_t)(1024 * 1024),
 			atomic_load32(&heap->size_class_use[iclass].spans_map_calls));
 	}
+	fprintf(file, "Spans  Current     Peak  PeakMiB  Cached  ToCacheMiB FromCacheMiB ToReserveMiB FromReserveMiB ToGlobalMiB FromGlobalMiB  MmapCalls\n");
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		if (!atomic_load32(&heap->span_use[iclass].high) && !atomic_load32(&heap->span_use[iclass].spans_map_calls))
+			continue;
+		fprintf(file, "%4u: %8d %8u %8zu %7u %11zu %12zu %12zu %14zu %11zu %13zu %10u\n", (uint32_t)(iclass + 1),
+			atomic_load32(&heap->span_use[iclass].current),
+			atomic_load32(&heap->span_use[iclass].high),
+			((size_t)atomic_load32(&heap->span_use[iclass].high) * (size_t)_memory_span_size * (iclass + 1)) / (size_t)(1024 * 1024),
+#if ENABLE_THREAD_CACHE
+			heap->span_cache[iclass] ? heap->span_cache[iclass]->list_size : 0,
+			((size_t)atomic_load32(&heap->span_use[iclass].spans_to_cache) * (iclass + 1) * _memory_span_size) / (size_t)(1024 * 1024),
+			((size_t)atomic_load32(&heap->span_use[iclass].spans_from_cache) * (iclass + 1) * _memory_span_size) / (size_t)(1024 * 1024),
+#else
+			0, 0ULL, 0ULL,
+#endif
+			((size_t)atomic_load32(&heap->span_use[iclass].spans_to_reserved) * (iclass + 1) * _memory_span_size) / (size_t)(1024 * 1024),
+			((size_t)atomic_load32(&heap->span_use[iclass].spans_from_reserved) * (iclass + 1) * _memory_span_size) / (size_t)(1024 * 1024),
+			((size_t)atomic_load32(&heap->span_use[iclass].spans_to_global) * (size_t)_memory_span_size * (iclass + 1)) / (size_t)(1024 * 1024),
+			((size_t)atomic_load32(&heap->span_use[iclass].spans_from_global) * (size_t)_memory_span_size * (iclass + 1)) / (size_t)(1024 * 1024),
+			atomic_load32(&heap->span_use[iclass].spans_map_calls));
+	}
+	fprintf(file, "ThreadToGlobalMiB GlobalToThreadMiB\n");
+	fprintf(file, "%17zu %17zu\n", (size_t)atomic_load64(&heap->thread_to_global) / (size_t)(1024 * 1024), (size_t)atomic_load64(&heap->global_to_thread) / (size_t)(1024 * 1024));
+}
+
+#endif
+
+void
+rpmalloc_dump_statistics(void* file) {
+#if ENABLE_STATISTICS
+	//If you hit this assert, you still have active threads or forgot to finalize some thread(s)
+	assert(atomic_load32(&_memory_active_heaps) == 0);
+	for (size_t list_idx = 0; list_idx < HEAP_ARRAY_SIZE; ++list_idx) {
+		heap_t* heap = atomic_load_ptr(&_memory_heaps[list_idx]);
+		while (heap) {
+			int need_dump = 0;
+			for (size_t iclass = 0; !need_dump && (iclass < SIZE_CLASS_COUNT); ++iclass) {
+				if (!atomic_load32(&heap->size_class_use[iclass].alloc_total)) {
+					assert(!atomic_load32(&heap->size_class_use[iclass].free_total));
+					assert(!atomic_load32(&heap->size_class_use[iclass].spans_map_calls));
+					continue;
+				}
+				need_dump = 1;
+			}
+			for (size_t iclass = 0; !need_dump && (iclass < LARGE_CLASS_COUNT); ++iclass) {
+				if (!atomic_load32(&heap->span_use[iclass].high) && !atomic_load32(&heap->span_use[iclass].spans_map_calls))
+					continue;
+				need_dump = 1;
+			}
+			if (need_dump)
+				_memory_heap_dump_statistics(heap, file);
+			heap = heap->next_heap;
+		}
+	}
+	fprintf(file, "Global stats:\n");
+	size_t huge_current = (size_t)atomic_load32(&_huge_pages_current) * _memory_page_size;
+	size_t huge_peak = (size_t)_huge_pages_peak * _memory_page_size;
+	fprintf(file, "HugeCurrentMiB HugePeakMiB\n");
+	fprintf(file, "%14zu %11zu\n", huge_current / (size_t)(1024 * 1024), huge_peak / (size_t)(1024 * 1024));
+
+	size_t mapped = (size_t)atomic_load32(&_mapped_pages) * _memory_page_size;
+	size_t mapped_os = (size_t)atomic_load32(&_mapped_pages_os) * _memory_page_size;
+	size_t mapped_peak = (size_t)_mapped_pages_peak * _memory_page_size;
+	size_t mapped_total = (size_t)atomic_load32(&_mapped_total) * _memory_page_size;
+	size_t unmapped_total = (size_t)atomic_load32(&_unmapped_total) * _memory_page_size;
+	size_t reserved_total = (size_t)atomic_load32(&_reserved_spans) * _memory_span_size;
+	fprintf(file, "MappedMiB MappedOSMiB MappedPeakMiB MappedTotalMiB UnmappedTotalMiB ReservedTotalMiB\n");
+	fprintf(file, "%9zu %11zu %13zu %14zu %16zu %16zu\n",
+		mapped / (size_t)(1024 * 1024),
+		mapped_os / (size_t)(1024 * 1024),
+		mapped_peak / (size_t)(1024 * 1024),
+		mapped_total / (size_t)(1024 * 1024),
+		unmapped_total / (size_t)(1024 * 1024),
+		reserved_total / (size_t)(1024 * 1024));
+
+	fprintf(file, "\n");
+#else
+	(void)sizeof(file);
+#endif
+}
+
+#if RPMALLOC_FIRST_CLASS_HEAPS
+
+extern inline rpmalloc_heap_t*
+rpmalloc_heap_acquire(void) {
+	// Must be a pristine heap from newly mapped memory pages, or else memory blocks
