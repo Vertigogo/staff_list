@@ -2914,3 +2914,89 @@ rpmalloc_dump_statistics(void* file) {
 extern inline rpmalloc_heap_t*
 rpmalloc_heap_acquire(void) {
 	// Must be a pristine heap from newly mapped memory pages, or else memory blocks
+	// could already be allocated from the heap which would (wrongly) be released when
+	// heap is cleared with rpmalloc_heap_free_all(). Also heaps guaranteed to be
+	// pristine from the dedicated orphan list can be used.
+	heap_t* heap = _rpmalloc_heap_allocate(1);
+	heap->owner_thread = 0;
+	_rpmalloc_stat_inc(&_memory_active_heaps);
+	return heap;
+}
+
+extern inline void
+rpmalloc_heap_release(rpmalloc_heap_t* heap) {
+	if (heap)
+		_rpmalloc_heap_release(heap, 1);
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpmalloc_heap_alloc(rpmalloc_heap_t* heap, size_t size) {
+#if ENABLE_VALIDATE_ARGS
+	if (size >= MAX_ALLOC_SIZE) {
+		errno = EINVAL;
+		return ptr;
+	}
+#endif
+	return _rpmalloc_allocate(heap, size);
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpmalloc_heap_aligned_alloc(rpmalloc_heap_t* heap, size_t alignment, size_t size) {
+#if ENABLE_VALIDATE_ARGS
+	if (size >= MAX_ALLOC_SIZE) {
+		errno = EINVAL;
+		return ptr;
+	}
+#endif
+	return _rpmalloc_aligned_allocate(heap, alignment, size);
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpmalloc_heap_calloc(rpmalloc_heap_t* heap, size_t num, size_t size) {
+	return rpmalloc_heap_aligned_calloc(heap, 0, num, size);
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpmalloc_heap_aligned_calloc(rpmalloc_heap_t* heap, size_t alignment, size_t num, size_t size) {
+	size_t total;
+#if ENABLE_VALIDATE_ARGS
+#if PLATFORM_WINDOWS
+	int err = SizeTMult(num, size, &total);
+	if ((err != S_OK) || (total >= MAX_ALLOC_SIZE)) {
+		errno = EINVAL;
+		return 0;
+	}
+#else
+	int err = __builtin_umull_overflow(num, size, &total);
+	if (err || (total >= MAX_ALLOC_SIZE)) {
+		errno = EINVAL;
+		return 0;
+	}
+#endif
+#else
+	total = num * size;
+#endif
+	void* block = _rpmalloc_aligned_allocate(heap, alignment, total);
+	if (block)
+		memset(block, 0, total);
+	return block;
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpmalloc_heap_realloc(rpmalloc_heap_t* heap, void* ptr, size_t size, unsigned int flags) {
+#if ENABLE_VALIDATE_ARGS
+	if (size >= MAX_ALLOC_SIZE) {
+		errno = EINVAL;
+		return ptr;
+	}
+#endif
+	return _rpmalloc_reallocate(heap, ptr, size, 0, flags);
+}
+
+extern inline RPMALLOC_ALLOCATOR void*
+rpmalloc_heap_aligned_realloc(rpmalloc_heap_t* heap, void* ptr, size_t alignment, size_t size, unsigned int flags) {
+#if ENABLE_VALIDATE_ARGS
+	if ((size + alignment < size) || (alignment > _memory_page_size)) {
+		errno = EINVAL;
+		return 0;
+	}
