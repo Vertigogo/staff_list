@@ -3000,3 +3000,100 @@ rpmalloc_heap_aligned_realloc(rpmalloc_heap_t* heap, void* ptr, size_t alignment
 		errno = EINVAL;
 		return 0;
 	}
+#endif
+	return _rpmalloc_aligned_reallocate(heap, ptr, alignment, size, 0, flags);
+}
+
+extern inline void
+rpmalloc_heap_free(rpmalloc_heap_t* heap, void* ptr) {
+	(void)sizeof(heap);
+	_rpmalloc_deallocate(ptr);
+}
+
+extern inline void
+rpmalloc_heap_free_all(rpmalloc_heap_t* heap) {
+	span_t* span;
+	span_t* next_span;
+
+	_rpmalloc_heap_cache_adopt_deferred(heap, 0);
+
+	for (size_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
+		span = heap->partial_span[iclass];
+		while (span) {
+			next_span = span->next;
+			_rpmalloc_heap_cache_insert(heap, span);
+			span = next_span;
+		}
+		heap->partial_span[iclass] = 0;
+		span = heap->full_span[iclass];
+		while (span) {
+			next_span = span->next;
+			_rpmalloc_heap_cache_insert(heap, span);
+			span = next_span;
+		}
+	}
+	memset(heap->free_list, 0, sizeof(heap->free_list));
+	memset(heap->partial_span, 0, sizeof(heap->partial_span));
+	memset(heap->full_span, 0, sizeof(heap->full_span));
+
+	span = heap->large_huge_span;
+	while (span) {
+		next_span = span->next;
+		if (UNEXPECTED(span->size_class == SIZE_CLASS_HUGE))
+			_rpmalloc_deallocate_huge(span);
+		else
+			_rpmalloc_heap_cache_insert(heap, span);
+		span = next_span;
+	}
+	heap->large_huge_span = 0;
+	heap->full_span_count = 0;
+
+#if ENABLE_THREAD_CACHE
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		span = heap->span_cache[iclass];
+#if ENABLE_GLOBAL_CACHE
+		while (span) {
+			assert(span->span_count == (iclass + 1));
+			size_t release_count = (!iclass ? _memory_span_release_count : _memory_span_release_count_large);
+			next_span = _rpmalloc_span_list_split(span, (uint32_t)release_count);
+			_rpmalloc_stat_add64(&heap->thread_to_global, (size_t)span->list_size * span->span_count * _memory_span_size);
+			_rpmalloc_stat_add(&heap->span_use[iclass].spans_to_global, span->list_size);
+			_rpmalloc_global_cache_insert_span_list(span);
+			span = next_span;
+		}
+#else
+		if (span)
+			_rpmalloc_span_list_unmap_all(span);
+#endif
+		heap->span_cache[iclass] = 0;
+	}
+#endif
+
+#if ENABLE_STATISTICS
+	for (size_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
+		atomic_store32(&heap->size_class_use[iclass].alloc_current, 0);
+		atomic_store32(&heap->size_class_use[iclass].spans_current, 0);
+	}
+	for (size_t iclass = 0; iclass < LARGE_CLASS_COUNT; ++iclass) {
+		atomic_store32(&heap->span_use[iclass].current, 0 );
+	}
+#endif
+}
+
+extern inline void
+rpmalloc_heap_thread_set_current(rpmalloc_heap_t* heap) {
+	heap_t* prev_heap = get_thread_heap_raw();
+	if (prev_heap != heap) {
+		set_thread_heap(heap);
+		if (prev_heap)
+			rpmalloc_heap_release(prev_heap);
+	}
+}
+
+#endif
+
+#if ENABLE_PRELOAD || ENABLE_OVERRIDE
+
+#include "malloc.c"
+
+#endif
