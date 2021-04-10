@@ -38,3 +38,14 @@ if args.sdir:
 def main():
     files = files_to_read
     while True:
+        for file in files:
+            with open(file, "r") as snippet:
+                lines = snippet.readlines()
+                for line in lines:
+                    for char in line:
+                        sleep(random.uniform(speed_min, speed_max))
+                        print(char, sep='', end='', flush=True)
+
+
+if __name__ == '__main__':
+    main()
