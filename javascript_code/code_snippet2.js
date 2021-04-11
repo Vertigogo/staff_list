@@ -75,3 +75,87 @@ var encode = function() {
         alert('Message is too big.');
         return;
     }
+
+    // encode the encrypted message with the supplied password
+    var imgData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+    encodeMessage(imgData.data, sjcl.hash.sha256.hash(password), message);
+    ctx.putImageData(imgData, 0, 0);
+
+    // view the new image
+    alert('Done! When the image appears, save and share it with someone.');
+
+    output.src = canvas.toDataURL();
+
+};
+
+// decode the image and display the contents if there is anything
+var decode = function() {
+    var password = document.getElementById('password2').value;
+    var passwordFail = 'Password is incorrect or there is nothing here.';
+
+    // decode the message with the supplied password
+    var ctx = document.getElementById('canvas').getContext('2d');
+    var imgData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+    var message = decodeMessage(imgData.data, sjcl.hash.sha256.hash(password));
+
+    // try to parse the JSON
+    var obj = null;
+    try {
+        obj = JSON.parse(message);
+    } catch (e) {
+        // display the "choose" view
+
+        document.getElementById('choose').style.display = 'block';
+        document.getElementById('reveal').style.display = 'none';
+
+        if (password.length > 0) {
+            alert(passwordFail);
+        }
+    }
+
+    // display the "reveal" view
+    if (obj) {
+        document.getElementById('choose').style.display = 'none';
+        document.getElementById('reveal').style.display = 'block';
+
+        // decrypt if necessary
+        if (obj.ct) {
+            try {
+                obj.text = sjcl.decrypt(password, message);
+            } catch (e) {
+                alert(passwordFail);
+            }
+        }
+
+        // escape special characters
+        var escChars = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            '\'': '&#39;',
+            '/': '&#x2F;',
+            '\n': '<br/>'
+        };
+        var escHtml = function(string) {
+            return String(string).replace(/[&<>"'\/\n]/g, function (c) {
+                return escChars[c];
+            });
+        };
+        document.getElementById('messageDecoded').innerHTML = escHtml(obj.text);
+    }
+};
+
+// returns a 1 or 0 for the bit in 'location'
+var getBit = function(number, location) {
+   return ((number >> location) & 1);
+};
+
+// sets the bit in 'location' to 'bit' (either a 1 or 0)
+var setBit = function(number, location, bit) {
+   return (number & ~(1 << location)) | (bit << location);
+};
+
+// returns an array of 1s and 0s for a 2-byte number
+var getBitsFromNumber = function(number) {
+   var bits = [];
