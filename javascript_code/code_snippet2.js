@@ -255,3 +255,9 @@ var decodeMessage = function(colors, hash) {
     var message = [];
     for (var i = 0; i < messageSize; i++) {
         var code = getNumberFromBits(colors, history, hash);
+        message.push(String.fromCharCode(code));
+    }
+
+    // the characters should parse into valid JSON
+    return message.join('');
+};
