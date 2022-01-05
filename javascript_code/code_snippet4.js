@@ -1,0 +1,1 @@
+/*global Uint8Array:true ArrayBuffer:tr
