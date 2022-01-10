@@ -11,4 +11,6 @@ var inflate = function(data, callback){
 var slice = Array.prototype.slice;
 var toString = Object.prototype.toString;
 
-fun
+function equalBytes(a, b){
+	if (a.length != b.length) return false;
+	for (var l = a.len
