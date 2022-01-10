@@ -8,4 +8,7 @@ var inflate = function(data, callback){
 	return zlib.inflate(new Buffer(data), callback);
 };
 
-v
+var slice = Array.prototype.slice;
+var toString = Object.prototype.toString;
+
+fun
