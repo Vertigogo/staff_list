@@ -13,4 +13,8 @@ var toString = Object.prototype.toString;
 
 function equalBytes(a, b){
 	if (a.length != b.length) return false;
-	for (var l = a.len
+	for (var l = a.length; l--;) if (a[l] != b[l]) return false;
+	return true;
+}
+
+function readUInt32(b
