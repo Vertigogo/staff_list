@@ -17,4 +17,7 @@ function equalBytes(a, b){
 	return true;
 }
 
-function readUInt32(b
+function readUInt32(buffer, offset){
+	return (buffer[offset] << 24) +
+		(buffer[offset + 1] << 16) +
+	
