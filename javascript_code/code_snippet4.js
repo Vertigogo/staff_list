@@ -20,4 +20,8 @@ function equalBytes(a, b){
 function readUInt32(buffer, offset){
 	return (buffer[offset] << 24) +
 		(buffer[offset + 1] << 16) +
-	
+		(buffer[offset + 2] << 8) +
+		(buffer[offset + 3] << 0);
+}
+
+function readUIn
