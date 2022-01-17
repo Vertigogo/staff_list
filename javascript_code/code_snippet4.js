@@ -28,4 +28,8 @@ function readUInt16(buffer, offset){
 	return (buffer[offset + 1] << 8) + (buffer[offset] << 0);
 }
 
-function rea
+function readUInt8(buffer, offset){
+	return buffer[offset] << 0;
+}
+
+function bufferToStrin
