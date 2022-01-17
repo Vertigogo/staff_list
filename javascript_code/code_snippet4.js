@@ -24,4 +24,8 @@ function readUInt32(buffer, offset){
 		(buffer[offset + 3] << 0);
 }
 
-function readUIn
+function readUInt16(buffer, offset){
+	return (buffer[offset + 1] << 8) + (buffer[offset] << 0);
+}
+
+function rea
