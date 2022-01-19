@@ -32,4 +32,7 @@ function readUInt8(buffer, offset){
 	return buffer[offset] << 0;
 }
 
-function bufferToStrin
+function bufferToString(buffer){
+	var str = '';
+	for (var i = 0; i < buffer.length; i++){
+		str
