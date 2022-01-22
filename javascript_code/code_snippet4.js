@@ -42,4 +42,7 @@ function bufferToString(buffer){
 
 var PNGReader = function(bytes){
 
-	if (typeof 
+	if (typeof bytes == 'string'){
+		var bts = bytes;
+		bytes = new Array(bts.length);
+		for (v
