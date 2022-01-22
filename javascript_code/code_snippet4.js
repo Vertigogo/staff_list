@@ -35,4 +35,11 @@ function readUInt8(buffer, offset){
 function bufferToString(buffer){
 	var str = '';
 	for (var i = 0; i < buffer.length; i++){
-		str
+		str += String.fromCharCode(buffer[i]);
+	}
+	return str;
+}
+
+var PNGReader = function(bytes){
+
+	if (typeof 
