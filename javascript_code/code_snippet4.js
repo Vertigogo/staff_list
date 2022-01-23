@@ -45,4 +45,7 @@ var PNGReader = function(bytes){
 	if (typeof bytes == 'string'){
 		var bts = bytes;
 		bytes = new Array(bts.length);
-		for (v
+		for (var i = 0, l = bts.length; i < l; i++){
+			bytes[i] = bts[i].charCodeAt(0);
+		}
+	} else
