@@ -48,4 +48,6 @@ var PNGReader = function(bytes){
 		for (var i = 0, l = bts.length; i < l; i++){
 			bytes[i] = bts[i].charCodeAt(0);
 		}
-	} else
+	} else {
+		var type = toString.call(bytes).slice(8, -1);
+		if (type == 'ArrayBuffer
