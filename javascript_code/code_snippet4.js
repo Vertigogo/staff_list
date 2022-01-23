@@ -50,4 +50,10 @@ var PNGReader = function(bytes){
 		}
 	} else {
 		var type = toString.call(bytes).slice(8, -1);
-		if (type == 'ArrayBuffer
+		if (type == 'ArrayBuffer') bytes = new Uint8Array(bytes);
+	}
+
+	// current pointer
+	this.i = 0;
+	// bytes buffer
+	this.byt
