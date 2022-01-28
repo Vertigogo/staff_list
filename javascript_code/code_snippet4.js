@@ -64,4 +64,6 @@ var PNGReader = function(bytes){
 
 };
 
-PNGReader.proto
+PNGReader.prototype.readBytes = function(length){
+	var end = this.i + length;
+	if (end > this.byt
