@@ -56,4 +56,12 @@ var PNGReader = function(bytes){
 	// current pointer
 	this.i = 0;
 	// bytes buffer
-	this.byt
+	this.bytes = bytes;
+	// Output object
+	this.png = new PNG();
+
+	this.dataChunks = [];
+
+};
+
+PNGReader.proto
