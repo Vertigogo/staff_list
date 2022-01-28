@@ -69,4 +69,10 @@ PNGReader.prototype.readBytes = function(length){
 	if (end > this.bytes.length){
 		throw new Error('Unexpectedly reached end of file');
 	}
-	var bytes =
+	var bytes = slice.call(this.bytes, this.i, end);
+	this.i = end;
+	return bytes;
+};
+
+/**
+ * ht
