@@ -66,4 +66,7 @@ var PNGReader = function(bytes){
 
 PNGReader.prototype.readBytes = function(length){
 	var end = this.i + length;
-	if (end > this.byt
+	if (end > this.bytes.length){
+		throw new Error('Unexpectedly reached end of file');
+	}
+	var bytes =
