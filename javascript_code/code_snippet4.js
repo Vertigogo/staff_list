@@ -75,4 +75,6 @@ PNGReader.prototype.readBytes = function(length){
 };
 
 /**
- * ht
+ * http://www.w3.org/TR/2003/REC-PNG-20031110/#5PNG-file-signature
+ */
+PNGReader.prototype.deco
