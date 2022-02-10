@@ -77,4 +77,7 @@ PNGReader.prototype.readBytes = function(length){
 /**
  * http://www.w3.org/TR/2003/REC-PNG-20031110/#5PNG-file-signature
  */
-PNGReader.prototype.deco
+PNGReader.prototype.decodeHeader = function(){
+
+	if (this.i !== 0){
+		throw new Error('file pointer should be at 0 t
