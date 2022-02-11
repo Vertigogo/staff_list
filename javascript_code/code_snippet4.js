@@ -80,4 +80,9 @@ PNGReader.prototype.readBytes = function(length){
 PNGReader.prototype.decodeHeader = function(){
 
 	if (this.i !== 0){
-		throw new Error('file pointer should be at 0 t
+		throw new Error('file pointer should be at 0 to read the header');
+	}
+
+	var header = this.readBytes(8);
+
+	if (!equalByte
