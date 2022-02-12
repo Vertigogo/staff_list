@@ -98,4 +98,7 @@ PNGReader.prototype.decodeHeader = function(){
  *
  * length =  4      bytes
  * type   =  4      bytes (IHDR, PLTE, IDAT, IEND or others)
- * 
+ * chunk  =  length bytes
+ * crc    =  4      bytes
+ */
+PNGReader.prototype.decodeChunk = function(){
