@@ -102,3 +102,8 @@ PNGReader.prototype.decodeHeader = function(){
  * crc    =  4      bytes
  */
 PNGReader.prototype.decodeChunk = function(){
+
+	var length = readUInt32(this.readBytes(4), 0);
+
+	if (length < 0){
+		throw new Error('Bad c
