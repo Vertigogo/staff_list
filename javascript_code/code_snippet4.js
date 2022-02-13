@@ -114,4 +114,5 @@ PNGReader.prototype.decodeChunk = function(){
 	var crc = this.readBytes(4);
 
 	switch (type){
-		case 'I
+		case 'IHDR': this.decodeIHDR(chunk); break;
+		case 'PLTE': this.decodePLTE(chunk); br
