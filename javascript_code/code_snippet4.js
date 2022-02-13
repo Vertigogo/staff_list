@@ -106,4 +106,7 @@ PNGReader.prototype.decodeChunk = function(){
 	var length = readUInt32(this.readBytes(4), 0);
 
 	if (length < 0){
-		throw new Error('Bad c
+		throw new Error('Bad chunk length ' + (0xFFFFFFFF & length));
+	}
+
+	var type = bufferToString(this.readBytes(4
