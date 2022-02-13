@@ -109,4 +109,9 @@ PNGReader.prototype.decodeChunk = function(){
 		throw new Error('Bad chunk length ' + (0xFFFFFFFF & length));
 	}
 
-	var type = bufferToString(this.readBytes(4
+	var type = bufferToString(this.readBytes(4));
+	var chunk = this.readBytes(length);
+	var crc = this.readBytes(4);
+
+	switch (type){
+		case 'I
