@@ -126,3 +126,6 @@ PNGReader.prototype.decodeChunk = function(){
 
 /**
  * http://www.w3.org/TR/2003/REC-PNG-20031110/#11IHDR
+ * http://www.libpng.org/pub/png/spec/1.2/png-1.2-pdg.html#C.IHDR
+ *
+ * Width       
