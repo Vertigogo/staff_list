@@ -118,4 +118,11 @@ PNGReader.prototype.decodeChunk = function(){
 		case 'PLTE': this.decodePLTE(chunk); break;
 		case 'IDAT': this.decodeIDAT(chunk); break;
 		case 'IEND': this.decodeIEND(chunk); break;
-	
+	}
+
+	return type;
+
+};
+
+/**
+ * http://www.w3.org/TR/2003/REC-PNG-20031110/#11IHDR
