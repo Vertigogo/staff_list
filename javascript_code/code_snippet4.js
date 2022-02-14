@@ -115,4 +115,7 @@ PNGReader.prototype.decodeChunk = function(){
 
 	switch (type){
 		case 'IHDR': this.decodeIHDR(chunk); break;
-		case 'PLTE': this.decodePLTE(chunk); br
+		case 'PLTE': this.decodePLTE(chunk); break;
+		case 'IDAT': this.decodeIDAT(chunk); break;
+		case 'IEND': this.decodeIEND(chunk); break;
+	
