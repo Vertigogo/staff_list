@@ -134,4 +134,6 @@ PNGReader.prototype.decodeChunk = function(){
  * Colour type         1 byte
  * Compression method  1 byte
  * Filter method       1 byte
- * In
+ * Interlace method    1 byte
+ */
+PNGReader.prototype.decodeIHDR = function(chunk){
