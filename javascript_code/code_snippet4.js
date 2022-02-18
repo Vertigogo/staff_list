@@ -131,4 +131,7 @@ PNGReader.prototype.decodeChunk = function(){
  * Width               4 bytes
  * Height              4 bytes
  * Bit depth           1 byte
- * Colo
+ * Colour type         1 byte
+ * Compression method  1 byte
+ * Filter method       1 byte
+ * In
