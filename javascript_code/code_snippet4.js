@@ -137,3 +137,6 @@ PNGReader.prototype.decodeChunk = function(){
  * Interlace method    1 byte
  */
 PNGReader.prototype.decodeIHDR = function(chunk){
+	var png = this.png;
+
+	png.setWidth(             readUInt32(ch
