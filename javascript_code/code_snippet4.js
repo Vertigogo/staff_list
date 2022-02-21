@@ -139,4 +139,6 @@ PNGReader.prototype.decodeChunk = function(){
 PNGReader.prototype.decodeIHDR = function(chunk){
 	var png = this.png;
 
-	png.setWidth(             readUInt32(ch
+	png.setWidth(             readUInt32(chunk, 0));
+	png.setHeight(            readUInt32(chunk, 4));
+	png.setBitDepth(          re
