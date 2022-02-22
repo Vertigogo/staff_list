@@ -141,4 +141,6 @@ PNGReader.prototype.decodeIHDR = function(chunk){
 
 	png.setWidth(             readUInt32(chunk, 0));
 	png.setHeight(            readUInt32(chunk, 4));
-	png.setBitDepth(          re
+	png.setBitDepth(          readUInt8(chunk,  8));
+	png.setColorType(         readUInt8(chunk,  9));
+	png.setCompress
