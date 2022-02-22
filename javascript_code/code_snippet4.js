@@ -144,4 +144,11 @@ PNGReader.prototype.decodeIHDR = function(chunk){
 	png.setBitDepth(          readUInt8(chunk,  8));
 	png.setColorType(         readUInt8(chunk,  9));
 	png.setCompressionMethod( readUInt8(chunk, 10));
-	png.setFilterMethod(      readUInt8(ch
+	png.setFilterMethod(      readUInt8(chunk, 11));
+	png.setInterlaceMethod(   readUInt8(chunk, 12));
+
+};
+
+/**
+ *
+ * http:/
