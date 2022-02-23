@@ -151,4 +151,6 @@ PNGReader.prototype.decodeIHDR = function(chunk){
 
 /**
  *
- * http:/
+ * http://www.w3.org/TR/PNG/#11PLTE
+ */
+PNGReader.prototype.decodePLTE = function(chunk){
