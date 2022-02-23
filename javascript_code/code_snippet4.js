@@ -154,3 +154,8 @@ PNGReader.prototype.decodeIHDR = function(chunk){
  * http://www.w3.org/TR/PNG/#11PLTE
  */
 PNGReader.prototype.decodePLTE = function(chunk){
+	this.png.setPalette(chunk);
+};
+
+/**
+ * http://www.w3.org/TR/2003/REC-PNG-20031110/#11I
