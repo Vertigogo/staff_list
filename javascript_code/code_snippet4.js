@@ -161,4 +161,9 @@ PNGReader.prototype.decodePLTE = function(chunk){
  * http://www.w3.org/TR/2003/REC-PNG-20031110/#11IDAT
  */
 PNGReader.prototype.decodeIDAT = function(chunk){
-	// multiple IDA
+	// multiple IDAT chunks will concatenated
+	this.dataChunks.push(chunk);
+};
+
+/**
+ * http://www.w3.org/TR/2003/REC-PNG-
