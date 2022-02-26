@@ -166,4 +166,10 @@ PNGReader.prototype.decodeIDAT = function(chunk){
 };
 
 /**
- * http://www.w3.org/TR/2003/REC-PNG-
+ * http://www.w3.org/TR/2003/REC-PNG-20031110/#11IEND
+ */
+PNGReader.prototype.decodeIEND = function(){
+};
+
+/**
+ * Uncompress IDAT 
