@@ -172,4 +172,8 @@ PNGReader.prototype.decodeIEND = function(){
 };
 
 /**
- * Uncompress IDAT 
+ * Uncompress IDAT chunks
+ */
+PNGReader.prototype.decodePixels = function(callback){
+	var png = this.png;
+	
