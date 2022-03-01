@@ -176,4 +176,7 @@ PNGReader.prototype.decodeIEND = function(){
  */
 PNGReader.prototype.decodePixels = function(callback){
 	var png = this.png;
-	
+	var reader = this;
+	var length = 0;
+	var i, j, k, l;
+	for (l = this.dataChunks.length; l-
