@@ -182,4 +182,8 @@ PNGReader.prototype.decodePixels = function(callback){
 	for (l = this.dataChunks.length; l--;) length += this.dataChunks[l].length;
 	var data = new Buffer(length);
 	for (i = 0, k = 0, l = this.dataChunks.length; i < l; i++){
-		var chunk = this.dataChunks[i]
+		var chunk = this.dataChunks[i];
+		for (j = 0; j < chunk.length; j++) data[k++] = chunk[j];
+	}
+	inflate(data, function(err, data){
+		if (err) ret
