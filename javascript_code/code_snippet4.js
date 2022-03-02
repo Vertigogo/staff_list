@@ -179,4 +179,6 @@ PNGReader.prototype.decodePixels = function(callback){
 	var reader = this;
 	var length = 0;
 	var i, j, k, l;
-	for (l = this.dataChunks.length; l-
+	for (l = this.dataChunks.length; l--;) length += this.dataChunks[l].length;
+	var data = new Buffer(length);
+	for (
