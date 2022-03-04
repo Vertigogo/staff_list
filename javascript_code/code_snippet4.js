@@ -190,4 +190,9 @@ PNGReader.prototype.decodePixels = function(callback){
 
 		try {
 			if (png.getInterlaceMethod() === 0){
-				reader.i
+				reader.interlaceNone(data);
+			} else {
+				reader.interlaceAdam7(data);
+			}
+		} catch (e){
+			return callback(e);
