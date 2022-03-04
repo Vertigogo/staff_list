@@ -196,3 +196,12 @@ PNGReader.prototype.decodePixels = function(callback){
 			}
 		} catch (e){
 			return callback(e);
+		}
+
+		callback();
+	});
+};
+
+// Different interlace methods
+
+PNGReader.prototype.
