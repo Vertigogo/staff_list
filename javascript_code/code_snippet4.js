@@ -186,4 +186,8 @@ PNGReader.prototype.decodePixels = function(callback){
 		for (j = 0; j < chunk.length; j++) data[k++] = chunk[j];
 	}
 	inflate(data, function(err, data){
-		if (err) ret
+		if (err) return callback(err);
+
+		try {
+			if (png.getInterlaceMethod() === 0){
+				reader.i
