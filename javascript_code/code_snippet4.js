@@ -209,4 +209,7 @@ PNGReader.prototype.interlaceNone = function(data){
 	var png = this.png;
 
 	// bytes per pixel
-	var bpp 
+	var bpp = Math.max(1, png.colors * png.bitDepth / 8);
+
+	// color bytes per row
+	var cpr = bpp * png.wid
