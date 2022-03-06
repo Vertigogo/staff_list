@@ -204,4 +204,9 @@ PNGReader.prototype.decodePixels = function(callback){
 
 // Different interlace methods
 
-PNGReader.prototype.
+PNGReader.prototype.interlaceNone = function(data){
+
+	var png = this.png;
+
+	// bytes per pixel
+	var bpp 
