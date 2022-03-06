@@ -216,4 +216,8 @@ PNGReader.prototype.interlaceNone = function(data){
 
 	var pixels = new Buffer(bpp * png.width * png.height);
 	var scanline;
-	var offset = 0
+	var offset = 0;
+
+	for (var i = 0; i < data.length; i += cpr + 1){
+
+		scanline = slice.call(d
