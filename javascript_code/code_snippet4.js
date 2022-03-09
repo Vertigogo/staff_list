@@ -220,4 +220,7 @@ PNGReader.prototype.interlaceNone = function(data){
 
 	for (var i = 0; i < data.length; i += cpr + 1){
 
-		scanline = slice.call(d
+		scanline = slice.call(data, i + 1, i + cpr + 1);
+
+		switch (readUInt8(data, i)){
+			case 0: this.unFilterNo
