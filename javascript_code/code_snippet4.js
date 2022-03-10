@@ -223,4 +223,5 @@ PNGReader.prototype.interlaceNone = function(data){
 		scanline = slice.call(data, i + 1, i + cpr + 1);
 
 		switch (readUInt8(data, i)){
-			case 0: this.unFilterNo
+			case 0: this.unFilterNone(   scanline, pixels, bpp, offset, cpr); break;
+			case 1: this.unFilterSub(    sca
