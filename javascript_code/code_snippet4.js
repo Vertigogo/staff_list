@@ -225,4 +225,5 @@ PNGReader.prototype.interlaceNone = function(data){
 		switch (readUInt8(data, i)){
 			case 0: this.unFilterNone(   scanline, pixels, bpp, offset, cpr); break;
 			case 1: this.unFilterSub(    scanline, pixels, bpp, offset, cpr); break;
-			case 2: this.unFilterUp(     scanline, pi
+			case 2: this.unFilterUp(     scanline, pixels, bpp, offset, cpr); break;
+			case 3: this.unFilterAverage(scanline, pixels, bpp, of
