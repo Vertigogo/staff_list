@@ -227,4 +227,8 @@ PNGReader.prototype.interlaceNone = function(data){
 			case 1: this.unFilterSub(    scanline, pixels, bpp, offset, cpr); break;
 			case 2: this.unFilterUp(     scanline, pixels, bpp, offset, cpr); break;
 			case 3: this.unFilterAverage(scanline, pixels, bpp, offset, cpr); break;
-			case 4: this.unFilterPaeth(  scanline, pixels, bpp,
+			case 4: this.unFilterPaeth(  scanline, pixels, bpp, offset, cpr); break;
+			default: throw new Error("unkown filtered scanline");
+		}
+
+		offset 
