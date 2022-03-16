@@ -239,4 +239,11 @@ PNGReader.prototype.interlaceNone = function(data){
 
 };
 
-PNGReader.prototype.interlaceAdam7 = function(da
+PNGReader.prototype.interlaceAdam7 = function(data){
+	throw new Error("Adam7 interlacing is not implemented yet");
+};
+
+// Unfiltering
+
+/**
+ * 
