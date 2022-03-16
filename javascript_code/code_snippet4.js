@@ -231,4 +231,12 @@ PNGReader.prototype.interlaceNone = function(data){
 			default: throw new Error("unkown filtered scanline");
 		}
 
-		offset 
+		offset += cpr;
+
+	}
+
+	png.pixels = pixels;
+
+};
+
+PNGReader.prototype.interlaceAdam7 = function(da
