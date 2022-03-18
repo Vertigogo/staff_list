@@ -246,4 +246,6 @@ PNGReader.prototype.interlaceAdam7 = function(data){
 // Unfiltering
 
 /**
- * 
+ * No filtering, direct copy
+ */
+PNGReader.prototype.unFilterNone = function(scanline, 
