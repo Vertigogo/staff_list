@@ -248,4 +248,6 @@ PNGReader.prototype.interlaceAdam7 = function(data){
 /**
  * No filtering, direct copy
  */
-PNGReader.prototype.unFilterNone = function(scanline, 
+PNGReader.prototype.unFilterNone = function(scanline, pixels, bpp, of, length){
+	for (var i = 0, to = length; i < to; i++){
+		pixels[
