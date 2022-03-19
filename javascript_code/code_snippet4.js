@@ -257,4 +257,6 @@ PNGReader.prototype.unFilterNone = function(scanline, pixels, bpp, of, length){
 /**
  * The Sub() filter transmits the difference between each byte and the value
  * of the corresponding byte of the prior pixel.
- * Sub(x)
+ * Sub(x) = Raw(x) + Raw(x - bpp)
+ */
+PNGReader.prototype.unFilterSub = function(scanline, p
