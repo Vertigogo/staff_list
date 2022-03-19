@@ -250,4 +250,9 @@ PNGReader.prototype.interlaceAdam7 = function(data){
  */
 PNGReader.prototype.unFilterNone = function(scanline, pixels, bpp, of, length){
 	for (var i = 0, to = length; i < to; i++){
-		pixels[
+		pixels[of + i] = scanline[i];
+	}
+};
+
+/**
+ * The Sub() filter transmits the difference between ea
