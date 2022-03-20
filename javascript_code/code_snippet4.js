@@ -259,4 +259,7 @@ PNGReader.prototype.unFilterNone = function(scanline, pixels, bpp, of, length){
  * of the corresponding byte of the prior pixel.
  * Sub(x) = Raw(x) + Raw(x - bpp)
  */
-PNGReader.prototype.unFilterSub = function(scanline, p
+PNGReader.prototype.unFilterSub = function(scanline, pixels, bpp, of, length){
+	var i = 0;
+	for (; i < bpp; i++) pixels[of + i] = scanline[i];
+	for (; i
