@@ -264,4 +264,9 @@ PNGReader.prototype.unFilterSub = function(scanline, pixels, bpp, of, length){
 	for (; i < bpp; i++) pixels[of + i] = scanline[i];
 	for (; i < length; i++){
 		// Raw(x) + Raw(x - bpp)
-		pixels[of + i] = (scanline[i] + pixels[of + i 
+		pixels[of + i] = (scanline[i] + pixels[of + i - bpp]) & 0xFF;
+	}
+};
+
+/**
+ * The Up() filter is just like the Sub() filter except th
