@@ -271,4 +271,7 @@ PNGReader.prototype.unFilterSub = function(scanline, pixels, bpp, of, length){
 /**
  * The Up() filter is just like the Sub() filter except that the pixel
  * immediately above the current pixel, rather than just to its left, is used
- * as
+ * as the predictor.
+ * Up(x) = Raw(x) + Prior(x)
+ */
+PNGReader.prototype.unFilterUp = function(s
