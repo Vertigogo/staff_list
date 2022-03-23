@@ -274,4 +274,6 @@ PNGReader.prototype.unFilterSub = function(scanline, pixels, bpp, of, length){
  * as the predictor.
  * Up(x) = Raw(x) + Prior(x)
  */
-PNGReader.prototype.unFilterUp = function(s
+PNGReader.prototype.unFilterUp = function(scanline, pixels, bpp, of, length){
+	var i = 0, byte, prev;
+	// Prior(
