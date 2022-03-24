@@ -280,4 +280,8 @@ PNGReader.prototype.unFilterUp = function(scanline, pixels, bpp, of, length){
 	if ((of - length) < 0) for (; i < length; i++){
 		pixels[of + i] = scanline[i];
 	} else for (; i < length; i++){
-		//
+		// Raw(x)
+		byte = scanline[i];
+		// Prior(x)
+		prev = pixels[of + i - length];
+		pixels[of +
