@@ -293,4 +293,5 @@ PNGReader.prototype.unFilterUp = function(scanline, pixels, bpp, of, length){
  * and above) to predict the value of a pixel.
  * Average(x) = Raw(x) + floor((Raw(x-bpp)+Prior(x))/2)
  */
-PNGReader.prototype.
+PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length){
+	var i = 0, byte, prev
