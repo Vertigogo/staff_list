@@ -307,4 +307,7 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
 	} else {
 		// Prior(x) != 0 && Raw(x - bpp) == 0
 		for (; i < bpp; i++){
-			pixels[of + i] = (scanline[i] + (pixels
+			pixels[of + i] = (scanline[i] + (pixels[of - length + i] >> 1)) & 0xFF;
+		}
+		// Prior(x) != 0 && Raw(x - bpp) != 0
+		
