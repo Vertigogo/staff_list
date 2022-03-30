@@ -314,4 +314,10 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
 			byte = scanline[i];
 			prev = pixels[of + i - bpp];
 			prior = pixels[of + i - length];
-			pixels[of + i] = (byte + (prev + prior >> 1
+			pixels[of + i] = (byte + (prev + prior >> 1)) & 0xFF;
+		}
+	}
+};
+
+/**
+ * The Paeth() filter computes a simple linear function of the three
