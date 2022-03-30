@@ -313,4 +313,5 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
 		for (; i < length; i++){
 			byte = scanline[i];
 			prev = pixels[of + i - bpp];
-		
+			prior = pixels[of + i - length];
+			pixels[of + i] = (byte + (prev + prior >> 1
