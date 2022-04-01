@@ -324,4 +324,6 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
  * neighboring pixels (left, above, upper left), then chooses as predictor
  * the neighboring pixel closest to the computed value. This technique is due
  * to Alan W. Paeth.
- * Paeth(x) = 
+ * Paeth(x) = Raw(x) +
+ *            PaethPredictor(Raw(x-bpp), Prior(x), Prior(x-bpp))
+ *  f
