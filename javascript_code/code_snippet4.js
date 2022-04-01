@@ -326,4 +326,6 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
  * to Alan W. Paeth.
  * Paeth(x) = Raw(x) +
  *            PaethPredictor(Raw(x-bpp), Prior(x), Prior(x-bpp))
- *  f
+ *  function PaethPredictor (a, b, c)
+ *  begin
+ *       ; a = left, b = above, c = 
