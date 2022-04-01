@@ -322,4 +322,6 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
 /**
  * The Paeth() filter computes a simple linear function of the three
  * neighboring pixels (left, above, upper left), then chooses as predictor
- * the neighbor
+ * the neighboring pixel closest to the computed value. This technique is due
+ * to Alan W. Paeth.
+ * Paeth(x) = 
