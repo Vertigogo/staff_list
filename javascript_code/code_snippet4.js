@@ -328,4 +328,6 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
  *            PaethPredictor(Raw(x-bpp), Prior(x), Prior(x-bpp))
  *  function PaethPredictor (a, b, c)
  *  begin
- *       ; a = left, b = above, c = 
+ *       ; a = left, b = above, c = upper left
+ *       p := a + b - c        ; initial estimate
+ *       pa := abs(p - a)      ; dista
