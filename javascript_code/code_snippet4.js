@@ -330,4 +330,7 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
  *  begin
  *       ; a = left, b = above, c = upper left
  *       p := a + b - c        ; initial estimate
- *       pa := abs(p - a)      ; dista
+ *       pa := abs(p - a)      ; distances to a, b, c
+ *       pb := abs(p - b)
+ *       pc := abs(p - c)
+ *       ; return nearest 
