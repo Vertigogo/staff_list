@@ -335,4 +335,7 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
  *       pc := abs(p - c)
  *       ; return nearest of a,b,c,
  *       ; breaking ties in order a,b,c.
- *       if pa <= pb AND pa 
+ *       if pa <= pb AND pa <= pc then return a
+ *       else if pb <= pc then return b
+ *       else return c
+ *  end
