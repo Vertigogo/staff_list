@@ -339,3 +339,6 @@ PNGReader.prototype.unFilterAverage = function(scanline, pixels, bpp, of, length
  *       else if pb <= pc then return b
  *       else return c
  *  end
+ */
+PNGReader.prototype.unFilterPaeth = function(scanline, pixels, bpp, of, length){
+	var
