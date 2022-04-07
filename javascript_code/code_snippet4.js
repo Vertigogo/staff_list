@@ -344,4 +344,7 @@ PNGReader.prototype.unFilterPaeth = function(scanline, pixels, bpp, of, length){
 	var i = 0, raw, a, b, c, p, pa, pb, pc, pr;
 	if ((of - length) < 0){
 		// Prior(x) == 0 && Raw(x - bpp) == 0
-		f
+		for (; i < bpp; i++){
+			pixels[of + i] = scanline[i];
+		}
+		// Prior(x) == 0 && Raw(x - b
