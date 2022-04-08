@@ -356,4 +356,6 @@ PNGReader.prototype.unFilterPaeth = function(scanline, pixels, bpp, of, length){
 		// Prior(x) != 0 && Raw(x - bpp) == 0
 		// paethPredictor(x, 0, 0) is always x
 		for (; i < bpp; i++){
-			pixels[of + i] = (scan
+			pixels[of + i] = (scanline[i] + pixels[of + i - length]) & 0xFF;
+		}
+		// Prior(x) != 0 && Raw(x - bpp
