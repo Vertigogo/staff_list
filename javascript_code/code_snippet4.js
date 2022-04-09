@@ -367,4 +367,7 @@ PNGReader.prototype.unFilterPaeth = function(scanline, pixels, bpp, of, length){
 			p = a + b - c;
 			pa = Math.abs(p - a);
 			pb = Math.abs(p - b);
-			pc = Math
+			pc = Math.abs(p - c);
+			if (pa <= pb && pa <= pc) pr = a;
+			else if (pb <= pc) pr = b;
+		
