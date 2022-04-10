@@ -370,4 +370,11 @@ PNGReader.prototype.unFilterPaeth = function(scanline, pixels, bpp, of, length){
 			pc = Math.abs(p - c);
 			if (pa <= pb && pa <= pc) pr = a;
 			else if (pb <= pc) pr = b;
-		
+			else pr = c;
+			pixels[of + i] = (raw + pr) & 0xFF;
+		}
+	}
+};
+
+/**
+ * Parse the PNG file
