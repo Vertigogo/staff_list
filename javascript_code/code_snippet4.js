@@ -378,3 +378,10 @@ PNGReader.prototype.unFilterPaeth = function(scanline, pixels, bpp, of, length){
 
 /**
  * Parse the PNG file
+ *
+ * reader.parse(options, callback)
+ * OR
+ * reader.parse(callback)
+ *
+ * OPTIONS:
+ *    option
