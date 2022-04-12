@@ -386,4 +386,6 @@ PNGReader.prototype.unFilterPaeth = function(scanline, pixels, bpp, of, length){
  * OPTIONS:
  *    option  | type     | default
  *    ----------------------------
- *    data      bool
+ *    data      boolean    true    should it read the pixel data
+ */
+PNGReader.prototype.
