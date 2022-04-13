@@ -391,4 +391,10 @@ PNGReader.prototype.unFilterPaeth = function(scanline, pixels, bpp, of, length){
 PNGReader.prototype.parse = function(options, callback){
 
 	if (typeof options == 'function') callback = options;
-	if (ty
+	if (typeof options != 'object') options = {};
+
+	try {
+
+		this.decodeHeader();
+
+		while (thi
