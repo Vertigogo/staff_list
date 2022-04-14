@@ -397,4 +397,6 @@ PNGReader.prototype.parse = function(options, callback){
 
 		this.decodeHeader();
 
-		while (thi
+		while (this.i < this.bytes.length){
+			var type = this.decodeChunk();
+			// stop after IHDR chunk, o
