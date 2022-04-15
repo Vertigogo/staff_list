@@ -400,4 +400,10 @@ PNGReader.prototype.parse = function(options, callback){
 		while (this.i < this.bytes.length){
 			var type = this.decodeChunk();
 			// stop after IHDR chunk, or after IEND
-			if (type == 'IHDR' && options.data === false || type == 'IEND'
+			if (type == 'IHDR' && options.data === false || type == 'IEND') break;
+		}
+
+		var png = this.png;
+
+		this.decodePixels(function(err){
+			callback
