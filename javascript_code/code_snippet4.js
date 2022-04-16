@@ -406,4 +406,13 @@ PNGReader.prototype.parse = function(options, callback){
 		var png = this.png;
 
 		this.decodePixels(function(err){
-			callback
+			callback(err, png);
+		});
+
+	} catch (e){
+		callback(e);
+	}
+
+};
+
+module.exports = PNGReader;
