@@ -1,1 +1,1 @@
-var BLAKE2
+var BLAKE2s=function(){function t(t){var i=Object.prototype.toString.call(t);return"[object Uint8Array]"===i
