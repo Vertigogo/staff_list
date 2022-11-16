@@ -154,3 +154,81 @@ RNG.prototype.normal = function() {
         return n;
     } else {
         var x = this.uniform() || Math.pow(2, -53); // can't be exactly 0
+        var y = this.uniform();
+        this._normal = Math.sqrt(-2 * Math.log(x)) * Math.sin(2 * Math.PI * y);
+        return Math.sqrt(-2 * Math.log(x)) * Math.cos(2 * Math.PI * y);
+    }
+};
+
+/**
+ * Generates numbers using this.uniform().
+ * @returns {number} Number from the exponential distribution, lambda = 1.
+ */
+RNG.prototype.exponential = function() {
+    return -Math.log(this.uniform() || Math.pow(2, -53));
+};
+
+/**
+ * Generates numbers using this.uniform() and Knuth's method.
+ * @param {number} [mean=1]
+ * @returns {number} Number from the Poisson distribution.
+ */
+RNG.prototype.poisson = function(mean) {
+    var L = Math.exp(-(mean || 1));
+    var k = 0, p = 1;
+    do {
+        k++;
+        p *= this.uniform();
+    } while (p > L);
+    return k - 1;
+};
+
+/**
+ * Generates numbers using this.uniform(), this.normal(),
+ * this.exponential(), and the Marsaglia-Tsang method.
+ * @param {number} a
+ * @returns {number} Number from the gamma distribution.
+ */
+RNG.prototype.gamma = function(a) {
+    var d = (a < 1 ? 1 + a : a) - 1 / 3;
+    var c = 1 / Math.sqrt(9 * d);
+    do {
+        do {
+            var x = this.normal();
+            var v = Math.pow(c * x + 1, 3);
+        } while (v <= 0);
+        var u = this.uniform();
+        var x2 = Math.pow(x, 2);
+    } while (u >= 1 - 0.0331 * x2 * x2 &&
+             Math.log(u) >= 0.5 * x2 + d * (1 - v + Math.log(v)));
+    if (a < 1) {
+        return d * v * Math.exp(this.exponential() / -a);
+    } else {
+        return d * v;
+    }
+};
+
+/**
+ * Accepts a dice rolling notation string and returns a generator
+ * function for that distribution. The parser is quite flexible.
+ * @param {string} expr A dice-rolling, expression i.e. '2d6+10'.
+ * @param {RNG} rng An optional RNG object.
+ * @returns {Function}
+ */
+RNG.roller = function(expr, rng) {
+    var parts = expr.split(/(\d+)?d(\d+)([+-]\d+)?/).slice(1);
+    var dice = parseFloat(parts[0]) || 1;
+    var sides = parseFloat(parts[1]);
+    var mod = parseFloat(parts[2]) || 0;
+    rng = rng || new RNG();
+    return function() {
+        var total = dice + mod;
+        for (var i = 0; i < dice; i++) {
+            total += rng.random(sides);
+        }
+        return total;
+    };
+};
+
+/* Provide a pre-made generator instance. */
+RNG.$ = new RNG();
