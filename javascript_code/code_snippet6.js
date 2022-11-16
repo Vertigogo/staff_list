@@ -73,3 +73,84 @@ RC4.prototype.mix = function(seed) {
  * @returns {number} The next byte of output from the generator.
  */
 RC4.prototype.next = function() {
+    this.i = (this.i + 1) % 256;
+    this.j = (this.j + this.s[this.i]) % 256;
+    this._swap(this.i, this.j);
+    return this.s[(this.s[this.i] + this.s[this.j]) % 256];
+};
+
+/**
+ * Create a new random number generator with optional seed. If the
+ * provided seed is a function (i.e. Math.random) it will be used as
+ * the uniform number generator.
+ * @param seed An arbitrary object used to seed the generator.
+ * @constructor
+ */
+function RNG(seed) {
+    if (seed == null) {
+        seed = '' + Math.random() + Date.now();
+    } else if (typeof seed === "function") {
+        // Use it as a uniform number generator
+        this.uniform = seed;
+        this.nextByte = function() {
+            return ~~(this.uniform() * 256);
+        };
+        seed = null;
+    } else if (Object.prototype.toString.call(seed) !== "[object String]") {
+        seed = JSON.stringify(seed);
+    }
+    this._normal = null;
+    if (seed) {
+        this._state = new RC4(seed);
+    } else {
+        this._state = null;
+    }
+}
+
+/**
+ * @returns {number} Uniform random number between 0 and 255.
+ */
+RNG.prototype.nextByte = function() {
+    return this._state.next();
+};
+
+/**
+ * @returns {number} Uniform random number between 0 and 1.
+ */
+RNG.prototype.uniform = function() {
+    var BYTES = 7; // 56 bits to make a 53-bit double
+    var output = 0;
+    for (var i = 0; i < BYTES; i++) {
+        output *= 256;
+        output += this.nextByte();
+    }
+    return output / (Math.pow(2, BYTES * 8) - 1);
+};
+
+/**
+ * Produce a random integer within [n, m).
+ * @param {number} [n=0]
+ * @param {number} m
+ *
+ */
+RNG.prototype.random = function(n, m) {
+    if (n == null) {
+        return this.uniform();
+    } else if (m == null) {
+        m = n;
+        n = 0;
+    }
+    return n + Math.floor(this.uniform() * (m - n));
+};
+
+/**
+ * Generates numbers using this.uniform() with the Box-Muller transform.
+ * @returns {number} Normally-distributed random number of mean 0, variance 1.
+ */
+RNG.prototype.normal = function() {
+    if (this._normal !== null) {
+        var n = this._normal;
+        this._normal = null;
+        return n;
+    } else {
+        var x = this.uniform() || Math.pow(2, -53); // can't be exactly 0
