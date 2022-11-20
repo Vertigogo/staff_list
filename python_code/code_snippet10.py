@@ -101,3 +101,94 @@ def check_leaked_markup(fn, lines):
 
 def main(argv):
     usage = '''\
+Usage: %s [-v] [-f] [-s sev] [-i path]* [path]
+
+Options:  -v       verbose (print all checked file names)
+          -f       enable checkers that yield many false positives
+          -s sev   only show problems with severity >= sev
+          -i path  ignore subdir or file path
+''' % argv[0]
+
+    try:
+        gopts, args = getopt.getopt(argv[1:], 'vfs:i:')
+    except getopt.GetoptError:
+        print(usage)
+        return 2
+
+    verbose = False
+    severity = 1
+    ignore = []
+    falsepos = False
+    for opt, val in gopts:
+        if opt == '-v':
+            verbose = True
+        elif opt == '-f':
+            falsepos = True
+        elif opt == '-s':
+            severity = int(val)
+        elif opt == '-i':
+            ignore.append(abspath(val))
+
+    if len(args) == 0:
+        path = '.'
+    elif len(args) == 1:
+        path = args[0]
+    else:
+        print(usage)
+        return 2
+
+    if not exists(path):
+        print('Error: path %s does not exist' % path)
+        return 2
+
+    count = defaultdict(int)
+
+    for root, dirs, files in os.walk(path):
+        # ignore subdirs in ignore list
+        if abspath(root) in ignore:
+            del dirs[:]
+            continue
+
+        for fn in files:
+            fn = join(root, fn)
+            if fn[:2] == './':
+                fn = fn[2:]
+
+            # ignore files in ignore list
+            if abspath(fn) in ignore:
+                continue
+
+            ext = splitext(fn)[1]
+            checkerlist = checkers.get(ext, None)
+            if not checkerlist:
+                continue
+
+            if verbose:
+                print('Checking %s...' % fn)
+
+            try:
+                with open(fn, 'r', encoding='utf-8') as f:
+                    lines = list(f)
+            except (IOError, OSError) as err:
+                print('%s: cannot open: %s' % (fn, err))
+                count[4] += 1
+                continue
+
+            for checker in checkerlist:
+                if checker.falsepositives and not falsepos:
+                    continue
+                csev = checker.severity
+                if csev >= severity:
+                    for lno, msg in checker(fn, lines):
+                        print('[%d] %s:%d: %s' % (csev, fn, lno, msg))
+                        count[csev] += 1
+    if verbose:
+        print()
+    if not count:
+        if severity > 1:
+            print('No problems with severity >= %d found.' % severity)
+        else:
+            print('No problems found.')
+    else:
+        for severity in sorted(count):
+            number = count[severity]
