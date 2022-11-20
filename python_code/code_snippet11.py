@@ -84,3 +84,62 @@ def init_db(databasePath):
 							UNIQUE(ipFrom, ipTo, domainId),
 							FOREIGN KEY(domainId) REFERENCES domains(id)
 						);""")
+
+
+# SELECT domain, ipFrom, ipTo, count FROM domains, whoAsk WHERE idDomain = domainId ORDER BY count DESC;
+
+if __name__ == "__main__":
+    parser = OptionParser(usage="%prog: [options]")
+    parser.add_option("-i", "--iface", dest="iface", default='', help="Interface. Ex: enp0s7")
+    parser.add_option("-q", "--quiet", dest="quiet", action="store_true", help="Quiet")
+    parser.add_option("-d", "--database", dest="databasePath", default='',
+                      help="Path to sqlite database for loggin. Ex: db.sqlite")
+    parser.add_option("-e", "--export", dest="exportPath", default='', help="Export sqlite database to CSV. Ex: db.csv")
+    (options, args) = parser.parse_args()
+
+    iface = options.iface
+    quiet = options.quiet
+    databasePath = options.databasePath
+
+    if databasePath != "":
+        try:
+            import sqlite3
+        except ImportError:
+            from sys import exit
+
+            exit("\033[31mYou need to setup sqlite3\033[0m")
+
+        init_db(databasePath)
+
+    if options.exportPath:
+        databaseCursor.execute(
+            "SELECT domain, ipFrom, ipTo, count FROM domains, whoAsk WHERE idDomain = domainId ORDER BY count DESC;")
+        data = databaseCursor.fetchall()
+        import csv
+
+        with open(options.exportPath, 'w') as f:
+            writer = csv.writer(f, delimiter=';')
+            writer.writerows([('domain', 'ipFrom', 'ipTo', 'count')])
+            writer.writerows(data)
+    else:
+        try:
+            from scapy.all import sniff
+            from scapy.all import ARP
+            from scapy.all import DNSQR
+            from scapy.all import UDP
+            from scapy.all import IP
+            from scapy.all import IPv6
+            from scapy.all import DNS
+        except ImportError:
+            from sys import exit
+
+            exit("\033[31mYou need to setup python3-scapy\033[0m\nsudo apt install python3-scapy")
+
+        if not quiet:
+            system('clear')
+            print("{:15s} | {:15s} | {:15s} | {}".format("IP source", "DNS server", "Count DNS request", "Query"))
+
+        if iface != "":
+            sniff(filter='udp port 53', store=0, prn=process, iface=iface)
+        else:
+            sniff(filter='udp port 53', store=0, prn=process)
