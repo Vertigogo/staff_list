@@ -192,3 +192,10 @@ Options:  -v       verbose (print all checked file names)
     else:
         for severity in sorted(count):
             number = count[severity]
+            print('%d problem%s with severity %d found.' %
+                  (number, 's' if number > 1 else '', severity))
+    return int(bool(count))
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
