@@ -74,3 +74,102 @@ def _parse_instructions(code):
         pos += 1
 
         oparg = None
+        if opcode >= _BYTECODE.have_argument:
+            oparg = extended_arg | _BYTECODE.argument.unpack_from(code, pos)[0]
+            pos += _BYTECODE.argument.size
+
+            if opcode == dis.EXTENDED_ARG:
+                extended_arg = oparg << _BYTECODE.argument_bits
+                extended_arg_offset = offset
+                continue
+
+        extended_arg = 0
+        extended_arg_offset = None
+        yield (dis.opname[opcode], oparg, offset)
+
+
+def _get_instruction_size(opname, oparg=0):
+    size = 1
+
+    extended_arg = oparg >> _BYTECODE.argument_bits
+    if extended_arg != 0:
+        size += _get_instruction_size('EXTENDED_ARG', extended_arg)
+        oparg &= (1 << _BYTECODE.argument_bits) - 1
+
+    opcode = dis.opmap[opname]
+    if opcode >= _BYTECODE.have_argument:
+        size += _BYTECODE.argument.size
+
+    return size
+
+
+def _get_instructions_size(ops):
+    size = 0
+    for op in ops:
+        if isinstance(op, str):
+            size += _get_instruction_size(op)
+        else:
+            size += _get_instruction_size(*op)
+    return size
+
+
+def _write_instruction(buf, pos, opname, oparg=0):
+    extended_arg = oparg >> _BYTECODE.argument_bits
+    if extended_arg != 0:
+        pos = _write_instruction(buf, pos, 'EXTENDED_ARG', extended_arg)
+        oparg &= (1 << _BYTECODE.argument_bits) - 1
+
+    opcode = dis.opmap[opname]
+    buf[pos] = opcode
+    pos += 1
+
+    if opcode >= _BYTECODE.have_argument:
+        _BYTECODE.argument.pack_into(buf, pos, oparg)
+        pos += _BYTECODE.argument.size
+
+    return pos
+
+
+def _write_instructions(buf, pos, ops):
+    for op in ops:
+        if isinstance(op, str):
+            pos = _write_instruction(buf, pos, op)
+        else:
+            pos = _write_instruction(buf, pos, *op)
+    return pos
+
+
+def _find_labels_and_gotos(code):
+    labels = {}
+    gotos = []
+
+    block_stack = []
+    block_counter = 0
+
+    opname1 = oparg1 = offset1 = None
+    opname2 = oparg2 = offset2 = None
+    opname3 = oparg3 = offset3 = None
+
+    for opname4, oparg4, offset4 in _parse_instructions(code.co_code):
+        if opname1 in ('LOAD_GLOBAL', 'LOAD_NAME'):
+            if opname2 == 'LOAD_ATTR' and opname3 == 'POP_TOP':
+                name = code.co_names[oparg1]
+                if name == 'label':
+                    if oparg2 in labels:
+                        raise SyntaxError('Ambiguous label {0!r}'.format(
+                            code.co_names[oparg2]
+                        ))
+                    labels[oparg2] = (offset1,
+                                      offset4,
+                                      tuple(block_stack))
+                elif name == 'goto':
+                    gotos.append((offset1,
+                                  offset4,
+                                  oparg2,
+                                  tuple(block_stack)))
+        elif opname1 in ('SETUP_LOOP',
+                         'SETUP_EXCEPT', 'SETUP_FINALLY',
+                         'SETUP_WITH', 'SETUP_ASYNC_WITH'):
+            block_counter += 1
+            block_stack.append(block_counter)
+        elif opname1 == 'POP_BLOCK' and block_stack:
