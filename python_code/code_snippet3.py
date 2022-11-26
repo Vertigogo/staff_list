@@ -173,3 +173,77 @@ def _find_labels_and_gotos(code):
             block_counter += 1
             block_stack.append(block_counter)
         elif opname1 == 'POP_BLOCK' and block_stack:
+            block_stack.pop()
+
+        opname1, oparg1, offset1 = opname2, oparg2, offset2
+        opname2, oparg2, offset2 = opname3, oparg3, offset3
+        opname3, oparg3, offset3 = opname4, oparg4, offset4
+
+    return labels, gotos
+
+
+def _inject_nop_sled(buf, pos, end):
+    while pos < end:
+        pos = _write_instruction(buf, pos, 'NOP')
+
+
+def _patch_code(code):
+    labels, gotos = _find_labels_and_gotos(code)
+    buf = array.array('B', code.co_code)
+
+    for pos, end, _ in labels.values():
+        _inject_nop_sled(buf, pos, end)
+
+    for pos, end, label, origin_stack in gotos:
+        try:
+            _, target, target_stack = labels[label]
+        except KeyError:
+            raise SyntaxError('Unknown label {0!r}'.format(
+                code.co_names[label]
+            ))
+
+        target_depth = len(target_stack)
+        if origin_stack[:target_depth] != target_stack:
+            raise SyntaxError('Jump into different block')
+
+        ops = []
+        for i in range(len(origin_stack) - target_depth):
+            ops.append('POP_BLOCK')
+        ops.append(('JUMP_ABSOLUTE', target // _BYTECODE.jump_unit))
+
+        if pos + _get_instructions_size(ops) > end:
+            # not enough space, add code at buffer end and jump there
+            buf_end = len(buf)
+
+            go_to_end_ops = [('JUMP_ABSOLUTE', buf_end // _BYTECODE.jump_unit)]
+
+            if pos + _get_instructions_size(go_to_end_ops) > end:
+                # not sure if reachable
+                raise SyntaxError('Goto in an incredibly huge function')
+
+            pos = _write_instructions(buf, pos, go_to_end_ops)
+            _inject_nop_sled(buf, pos, end)
+
+            buf.extend([0] * _get_instructions_size(ops))
+            _write_instructions(buf, buf_end, ops)
+        else:
+            pos = _write_instructions(buf, pos, ops)
+            _inject_nop_sled(buf, pos, end)
+
+    return _make_code(code, _array_to_bytes(buf))
+
+
+def with_goto(func_or_code):
+    if isinstance(func_or_code, types.CodeType):
+        return _patch_code(func_or_code)
+
+    return functools.update_wrapper(
+        types.FunctionType(
+            _patch_code(func_or_code.__code__),
+            func_or_code.__globals__,
+            func_or_code.__name__,
+            func_or_code.__defaults__,
+            func_or_code.__closure__,
+        ),
+        func_or_code
+    )
