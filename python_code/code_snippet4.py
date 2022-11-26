@@ -100,3 +100,36 @@ def main(database):
 	one process.
 	"""
 	while True:
+		private_key = generate_private_key()			# 0.0000061659 seconds
+		public_key = private_key_to_public_key(private_key) 	# 0.0031567731 seconds
+		address = public_key_to_address(public_key)		# 0.0000801390 seconds
+		process(private_key, public_key, address, database) 	# 0.0000026941 seconds
+									# --------------------
+									# 0.0032457721 seconds
+
+if __name__ == '__main__':
+	"""
+	Deserialize the database and read into a list of sets for easier selection
+	and O(1) complexity. Initialize the multiprocessing to target the main
+	function with cpu_count() concurrent processes.
+	"""
+	database = [set() for _ in range(4)]
+	count = len(os.listdir(DATABASE))
+	half = count // 2
+	quarter = half // 2
+	for c, p in enumerate(os.listdir(DATABASE)):
+		print('\rreading database: ' + str(c + 1) + '/' + str(count), end = ' ')
+		with open(DATABASE + p, 'rb') as file:
+			if c < half:
+				if c < quarter: database[0] = database[0] | pickle.load(file)
+				else: database[1] = database[1] | pickle.load(file)
+			else:
+				if c < half + quarter: database[2] = database[2] | pickle.load(file)
+				else: database[3] = database[3] | pickle.load(file)
+	print('DONE')
+
+	# To verify the database size, remove the # from the line below
+	#print('database size: ' + str(sum(len(i) for i in database))); quit()
+
+	for cpu in range(multiprocessing.cpu_count()):
+		multiprocessing.Process(target = main, args = (database, )).start()
