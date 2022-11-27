@@ -214,3 +214,84 @@ if sys.version_info[1]<=4:
 	class Queue(Queue):
 		def __init__(self, maxsize=0):
 			self.maxsize = maxsize
+			self._init(maxsize)
+			self.mutex = threading.Lock()
+			self.not_empty = threading.Condition(self.mutex)
+			self.not_full = threading.Condition(self.mutex)
+			self.all_tasks_done = threading.Condition(self.mutex)
+			self.unfinished_tasks = 0
+
+		def task_done(self):
+			self.all_tasks_done.acquire()
+			try:
+				unfinished = self.unfinished_tasks - 1
+				if unfinished <= 0:
+					if unfinished < 0:
+						raise ValueError('task_done() called too many times')
+					self.all_tasks_done.notifyAll()
+				self.unfinished_tasks = unfinished
+			finally:
+				self.all_tasks_done.release()
+
+		def join(self):
+			self.all_tasks_done.acquire()
+			try:
+				while self.unfinished_tasks:
+					self.all_tasks_done.wait()
+			finally:
+				self.all_tasks_done.release()
+		def put(self, item, block=True, timeout=None):
+			self.not_full.acquire()
+			try:
+				if self.maxsize > 0:
+					if not block:
+						if self._qsize() == self.maxsize:
+							raise Full
+					elif timeout is None:
+						while self._qsize() == self.maxsize:
+							self.not_full.wait()
+					elif timeout < 0:
+						raise ValueError("'timeout' must be a positive number")
+					else:
+						endtime = _time() + timeout
+						while self._qsize() == self.maxsize:
+							remaining = endtime - _time()
+							if remaining <= 0.0:
+								raise Full
+							self.not_full.wait(remaining)
+				self._put(item)
+				self.unfinished_tasks += 1
+				self.not_empty.notify()
+			finally:
+				self.not_full.release()
+
+class Queue(Queue):
+	def randget(self):
+		from random import randrange
+		self.queue.rotate(randrange(0,self._qsize()+1))
+		return self.get()
+
+
+# convert an IP address from its dotted-quad format to its
+# 32 binary digit representation
+def ip2bin(ip):
+	b = ""
+	inQuads = ip.split(".")
+	outQuads = 4
+	for q in inQuads:
+		if q != "":
+			b += dec2bin(int(q),8)
+			outQuads -= 1
+	while outQuads > 0:
+		b += "00000000"
+		outQuads -= 1
+	return b
+
+# convert a decimal number to binary representation
+# if d is specified, left-pad the binary number with 0s to that length
+def dec2bin(n,d=None):
+	s = ""
+	while n>0:
+		if n&1:
+			s = "1"+s
+		else:
