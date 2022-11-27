@@ -295,3 +295,79 @@ def dec2bin(n,d=None):
 		if n&1:
 			s = "1"+s
 		else:
+			s = "0"+s
+		n >>= 1
+	if d is not None:
+		while len(s)<d:
+			s = "0"+s
+	if s == "": s = "0"
+	return s
+
+# convert a binary string into an IP address
+def bin2ip(b):
+	ip = ""
+	for i in range(0,len(b),8):
+		ip += str(int(b[i:i+8],2))+"."
+	return ip[:-1]
+
+# print a list of IP addresses based on the CIDR block specified
+def listCIDR(c):
+	cidrlist=[]
+	parts = c.split("/")
+	baseIP = ip2bin(parts[0])
+	subnet = int(parts[1])
+	# Python string-slicing weirdness:
+	# "myString"[:-1] -> "myStrin" but "myString"[:0] -> ""
+	# if a subnet of 32 was specified simply print the single IP
+	if subnet == 32:
+		print bin2ip(baseIP)
+	# for any other size subnet, print a list of IP addresses by concatenating
+	# the prefix with each of the suffixes in the subnet
+	else:
+		ipPrefix = baseIP[:-(32-subnet)]
+		for i in range(2**(32-subnet)):
+			cidrlist.append(bin2ip(ipPrefix+dec2bin(i, (32-subnet))))
+		return cidrlist
+
+# input validation routine for the CIDR block specified
+def validateCIDRBlock(b):
+	# appropriate format for CIDR block ($prefix/$subnet)
+	p = re.compile("^([0-9]{1,3}\.){0,3}[0-9]{1,3}(/[0-9]{1,2}){1}$")
+	if not p.match(b):
+		print "Error: Invalid CIDR format!"
+		return False
+	# extract prefix and subnet size
+	prefix, subnet = b.split("/")
+	# each quad has an appropriate value (1-255)
+	quads = prefix.split(".")
+	for q in quads:
+		if (int(q) < 0) or (int(q) > 255):
+			print "Error: quad "+str(q)+" wrong size."
+			return False
+	# subnet is an appropriate value (1-32)
+	if (int(subnet) < 1) or (int(subnet) > 32):
+		print "Error: subnet "+str(subnet)+" wrong size."
+		return False
+	# passed all checks -> return True
+	return True
+
+def pinger():
+	global pinglist
+	while True:
+		ip=q.randget()
+		if platform.system()=='Linux':
+			p=Popen(['ping','-c 2',ip],stdout=PIPE)
+			m = re.search('(\d)\sreceived', p.stdout.read())
+			try:
+				if m.group(1)!='0':
+					pinglist.append(ip)
+			except:pass
+		if platform.system()=='Windows':
+			p=Popen('ping -n 2 ' + ip, stdout=PIPE)
+			m = re.search('TTL', p.stdout.read())
+			if m:
+				pinglist.append(ip)
+		q.task_done()
+
+def pingsubnet(q):
+	global pinglist
