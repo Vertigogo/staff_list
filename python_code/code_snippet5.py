@@ -566,3 +566,92 @@ def dlpage(ip,port,ssl=False):
 			url='Homepage'
 		lock.acquire()
 		if r.status==200:
+			result=r.read()
+			cc=re.search('charset=(.*?)"',result)
+			try:
+				charset=cc.group(1)
+			except:
+				charset=None
+			if charset in ['gb2312','gbk']:
+				try:
+					result=result.decode(charset).encode('utf8')
+				except:pass
+			tt=re.search('<title>(.*)</title>',result)
+			try:
+				title=tt.group(1)
+			except:
+				title=''
+			try:
+				header=r.getheader('Server')
+			except:
+				header=''
+			print ip+':'+str(port),url,'exists.','Code:',r.status,header,title
+			page+='<h2>'+url+'</h2><br>'+result
+		if r.status==401:
+			print ip+':'+str(port),url,'exists.','Code:',r.status,'Auth required'
+		if r.status in [301,302]:
+			print ip+':'+str(port),url,'Code:',r.status
+		lock.release()
+		c.close()
+
+
+def findhost(ip,port,hostname,ssl=False):
+	global lock
+	if ssl==True:
+		try:
+			c=httplib.HTTPSConnection(ip+':'+str(port))
+			header={"Host":hostname}
+			c.request('GET','/','',header)
+			r=c.getresponse()
+		except:
+			return
+	else:
+		try:
+			c=httplib.HTTPConnection(ip+':'+str(port))
+			header={"Host":hostname}
+			c.request('GET','/','',header)
+			r=c.getresponse()
+			#print url,r.status
+		except:
+			return
+	if r.status in [200,301,302]:
+		try:
+			redirect=r.getheader('Location')
+		except:
+			pass
+		try:
+			result=r.read()
+		except:
+			return
+		cc=re.search('charset=(.*?)"',result)
+		try:
+			charset=cc.group(1)
+		except:
+			charset=None
+		if charset in ['gb2312','gbk']:
+			try:
+				result=result.decode(charset).encode('utf8')
+			except:pass
+		tt=re.search('<title>(.*)</title>',result)
+		try:
+			title=tt.group(1)
+		except:
+			title=''
+		lock.acquire()
+		if redirect!=None:
+			print hostname,'running on',ip+':'+str(port),'Location',redirect
+		else:
+			print hostname,'running on',ip+':'+str(port),'Title:',title
+		lock.release()
+	c.close()
+
+if __name__ == "__main__":
+	usage="usage: insightscan.py <hosts[/24|/CIDR]> [start port] [end port] -t threads\n\nExample: insightscan.py 192.168.0.0/24 1 1024 -t 20"
+	parser = OptionParser(usage=usage)
+	parser.add_option("-t", "--threads", dest="NUM",help="Maximum threads, default 50")
+	parser.add_option("-T", "--timeout", dest="TIMEOUT",help="Scan timeout, per thread")
+	parser.add_option("-n", "--network", dest="network",help="Quick Network discovery, find reachable networks. Local IP range only. A=10.0.0.0-10.255.255.255\nB=172.16.0.0-172.31.255.255\nC=192.168.0.0-192.168.255.255\nExample: -n B will try Class B addresses")
+	parser.add_option("-H", "--findhost", dest="hostname",help="Help you find which IP address is running a particular virtual host.\nExample: 192.168.0.0/24 -H example.com")
+	parser.add_option("-p", "--portlist", dest="PORTS",help="Customize port list, separate with ',' example: 21,22,23,25 ...")
+	parser.add_option("-N", '--noping', action="store_true", dest="noping",help="Skip ping sweep, port scan whether targets are alive or not")
+	parser.add_option("-P", '--pingonly', action="store_true", dest="noscan",help="Ping scan only,disable port scan")
