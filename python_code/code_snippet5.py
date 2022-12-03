@@ -743,3 +743,33 @@ if __name__ == "__main__":
 	if options.genlist==True:
 		global ipdict
 		ipdict={}
+	for i in range(NUM):
+		st = Thread(target=scanipport)
+		if options.service==True:
+			st = Thread(target=scanservice)
+		st.setDaemon(True)
+		st.start()
+
+	for scanip in pinglist:
+		for port in PORTS:
+			sq.put((scanip,port))
+	sq.join()
+
+	if options.genlist==True:
+		for port,iplist in ipdict.items():
+			if options.genfile==True:
+				 file=open(str(port)+'.txt', "a")
+			else:
+				print "\n========",port,'========'
+
+			for ip in iplist:
+				if options.genfile==True:
+					file.write(ip+"\n")
+				else:
+					print ip
+
+	if options.downpage==True and page!='':
+		f = open('page.html', 'a')
+		f.write(page)
+		f.close()
+		print 'page dumped to page.html'
