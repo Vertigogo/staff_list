@@ -655,3 +655,91 @@ if __name__ == "__main__":
 	parser.add_option("-p", "--portlist", dest="PORTS",help="Customize port list, separate with ',' example: 21,22,23,25 ...")
 	parser.add_option("-N", '--noping', action="store_true", dest="noping",help="Skip ping sweep, port scan whether targets are alive or not")
 	parser.add_option("-P", '--pingonly', action="store_true", dest="noscan",help="Ping scan only,disable port scan")
+	parser.add_option("-S", '--service', action="store_true", dest="service",help="Service detection, using banner and signature")
+	parser.add_option("-d", '--downpage', action="store_true", dest="downpage",help="Detects interesting stuff on HTTP ports(80,80,8080), when used with -S , will try all ports with HTTP service. Grab and save to HTML pages if found anything.")
+	parser.add_option("-l", '--genlist', action="store_true", dest="genlist",help="Output a list, ordered by port number(service, with -S option),for THC-Hydra IP list")
+	parser.add_option("-L", '--genfile', action="store_true", dest="genfile",help="Put the IP list in separate files named by port number(service, with -S option). Implies -l option.\nExample: IPs with port 445 opened will be put into 445.txt")
+	(options, args) = parser.parse_args()
+
+	if lowversion:
+		print "Python version too low, cannot use ping...\n"
+		options.noping=True
+		options.noscan=False
+		options.network=None
+	if options.NUM !=None and options.NUM!=0:
+		NUM=int(options.NUM)
+		print 'Scanning with',NUM,'threads...'
+	if options.TIMEOUT != None and int(options.TIMEOUT)!=0:
+		TIMEOUT=int(options.TIMEOUT)
+	if options.network!=None:
+		networkdiscovery(options.network)
+		sys.exit()
+	if len(args)<1:
+		parser.print_help()
+		sys.exit()
+	if options.noping== True and options.noscan == True:
+		print 'ERROR: Cannot use -N and -P together'
+		sys.exit()
+	iplist=[]
+	ipaddr=args[0]
+	if len(args)==2:
+		print 'Must specify end port'
+		sys.exit()
+	try:
+		sk.inet_aton(ipaddr)
+		iplist.append(ipaddr)
+	except:
+		if not validateCIDRBlock(ipaddr):
+			print 'IP address not valid!'
+			sys.exit()
+		else:
+			iplist=listCIDR(ipaddr)
+	if len(args)==3:
+		startport=int(args[1])
+		endport=int(args[2])
+		if startport>endport:
+			print 'start port must be smaller or equal to end port'
+			sys.exit()
+		PORTS=[]
+		for i in xrange(startport,endport+1):
+			PORTS.append(i)
+	if options.PORTS!= None:
+		PORTS=[int(pn) for pn in options.PORTS.split(',') ]
+	global page
+	page=''
+#start ping threads
+
+	if options.noping != True:
+		print "Scanning for live machines...\n"
+		global pinglist
+		q=Queue()
+		pinglist=[]
+		for i in range(NUM):
+			t = Thread(target=pinger)
+			t.setDaemon(True)
+			t.start()
+
+		for ip in iplist:
+			q.put(ip)
+		q.join()
+	else:
+		pinglist=iplist
+	#print pinglist
+	if options.noscan == True:
+		for host in pinglist:
+			print host
+		sys.exit()
+	if len(pinglist)==0:
+		print 'No live machines detected. Try again with -N switch'
+		sys.exit()
+	print "Scanning ports...\n"
+	sq=Queue()
+	lock = threading.Lock()
+	if options.service==True:
+		global signs
+		signs=prepsigns()
+	if options.genfile==True:
+		options.genlist=True
+	if options.genlist==True:
+		global ipdict
+		ipdict={}
