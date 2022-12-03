@@ -461,3 +461,108 @@ def scanipport():
 			sd.close()
 			if options.downpage==True and port in [80,81,1080,8080]:
 				dlpage(host,port)
+			if options.downpage==True and port ==443:
+				dlpage(host,port,True)
+			if options.hostname!=None and port in [80,81,1080,8080]:
+				findhost(host,port,options.hostname)
+			if options.hostname!=None and port ==443:
+				findhost(host,port,options.hostname,True)
+		except:
+			pass
+		sq.task_done()
+
+def scanservice():
+	global signs,lock
+	while True:
+		host,port=sq.randget()
+		sd=sk.socket(sk.AF_INET, sk.SOCK_STREAM)
+		sd.settimeout(TIMEOUT)
+		service='Unknown'
+		try:
+			sd.connect((host,port))
+		except:
+			sq.task_done()
+			continue
+		try:
+			result = sd.recv(256)
+			service=matchbanner(result,signs)
+		except:
+			for probe in PROBES:
+				try:
+					sd.close()
+					sd=sk.socket(sk.AF_INET, sk.SOCK_STREAM)
+					sd.settimeout(TIMEOUT)
+					sd.connect((host,port))
+					sd.sendall(probe)
+				except:
+					continue
+				try:
+					result = sd.recv(256)
+					service=matchbanner(result,signs)
+					if service!='Unknown':
+						break
+				except:
+					continue
+		if options.genlist==True:
+			if service not in ipdict:
+				ipdict[service]=[]
+				ipdict[service].append(host+':'+str(port))
+			else:
+				ipdict[service].append(host+':'+str(port))
+		else:
+			lock.acquire()
+			if service!='Unknown':
+				print "%s:%d OPEN %s" % (host, port, service)
+			else:
+				print "%s:%d OPEN" % (host, port)
+			lock.release()
+			sd.close()
+			if options.downpage==True and service=='http':
+				dlpage(host,port)
+			if options.downpage==True and service=='ssl':
+				dlpage(host,port,True)
+			if options.hostname!=None and service=='http':
+				findhost(host,port,options.hostname)
+			if options.hostname!=None and service=='ssl':
+				findhost(host,port,options.hostname,True)
+		sq.task_done()
+
+def prepsigns():
+	signlist=[]
+	for 	item in SIGNS:
+		#print item
+		(label,pattern)=item.split('|',2)
+		sign=(label,pattern)
+		signlist.append(sign)
+	return signlist
+
+def matchbanner(banner,slist):
+	for item in slist:
+		p=re.compile(item[1])
+		if p.search(banner)!=None:
+			return item[0]
+	return 'Unknown'
+
+def dlpage(ip,port,ssl=False):
+	global page,lock
+	page+='<h1>'+ip+':'+str(port)+'</h1><br>'
+	for url in URLS:
+		if ssl==True:
+			try:
+				c=httplib.HTTPSConnection(ip+':'+str(port))
+				c.request('GET','/'+url)
+				r=c.getresponse()
+			except:
+				return
+		else:
+			try:
+				c=httplib.HTTPConnection(ip+':'+str(port))
+				c.request('GET','/'+url)
+				r=c.getresponse()
+				#print url,r.status
+			except:
+				return
+		if url=='':
+			url='Homepage'
+		lock.acquire()
+		if r.status==200:
