@@ -371,3 +371,93 @@ def pinger():
 
 def pingsubnet(q):
 	global pinglist
+	pinglist=[]
+	while True:
+		tup=q.randget()
+		(gt,bc)=tup
+		sys.stdout.write('.')
+		if platform.system()=='Linux':
+			try:
+				p=Popen(['ping','-c 2',gt],stdout=PIPE)
+				m = re.search('(\d)\sreceived', p.stdout.read())
+				gt=gt.split('.')
+				gt=gt[0]+'.'+gt[1]+'.'+gt[2]+'.'+'0'
+			except:pass
+			try:
+				if m.group(1)!='0':
+					pinglist.append(gt)
+				else:
+					p=Popen(['ping','-c 2 -b',bc],stdout=PIPE)
+					m = re.search('(\d)\sreceived', p.stdout.read())
+					try:
+						if m.group(1)!='0':
+							pinglist.append(gt)
+					except:pass
+			except:pass
+		if platform.system()=='Windows':
+			try:
+				p=Popen('ping -n 2 ' + gt, stdout=PIPE)
+				m = re.search('TTL', p.stdout.read())
+				gt=gt.split('.')
+				gt=gt[0]+'.'+gt[1]+'.'+gt[2]+'.'+'0'
+				if m:
+					pinglist.append(gt)
+				else:
+					p=Popen('ping -n 2 ' + bc, stdout=PIPE)
+					m = re.search('TTL', p.stdout.read())
+					if m:
+						pinglist.append(gt)
+			except:pass
+		q.task_done()
+
+def networkdiscovery(subclass):
+	if subclass not in ['A','B','C']:
+		print 'Option incorrect, only A,B,C are allowed'
+		exit()
+	global pinglist
+	iplist=[]
+	if subclass=='A':
+		for i in xrange(256):
+			for j in xrange(256):
+				iplist.append(('10.'+str(i)+'.'+str(j)+'.1','10.'+str(i)+'.'+str(j)+'.255'))
+	if subclass=='B':
+		for i in xrange(16,32):
+			for j in xrange(256):
+				iplist.append(('172.'+str(i)+'.'+str(j)+'.1','172.'+str(i)+'.'+str(j)+'.255'))
+	if 	subclass=='C':
+		for i in xrange(256):
+			iplist.append(('192.168.'+str(i)+'.1','192.168.'+str(i)+'.255'))
+	q=Queue()
+	for i in range(NUM):
+		th = Thread(target=pingsubnet,args=(q,))
+		th.setDaemon(True)
+		th.start()
+
+
+	for ip in iplist:
+		q.put(ip)
+	q.join()
+	for addr in pinglist:
+		print addr,'is reachable.'
+
+def scanipport():
+	global lock
+	while True:
+		host,port=sq.randget()
+		sd=sk.socket(sk.AF_INET, sk.SOCK_STREAM)
+		sd.settimeout(TIMEOUT)
+		try:
+			sd.connect((host,port))
+			if options.genlist==True:
+				if port not in ipdict:
+					ipdict[port]=[]
+					ipdict[port].append(host)
+				else:
+					ipdict[port].append(host)
+			else:
+				lock.acquire()
+				print "%s:%d OPEN" % (host, port)
+				lock.release()
+			sd.close()
+			if options.downpage==True and port in [80,81,1080,8080]:
+				dlpage(host,port)
