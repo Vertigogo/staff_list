@@ -97,3 +97,84 @@ class Etrigan(object):
                 self.logfile = logfile
                 self.loglevel = loglevel
                 self.mute = mute
+                self.want_quit = want_quit
+                self.pause_loop = pause_loop
+                # internal only.
+                self.homedir = '/'
+                self.umask = 0o22
+                self.etrigan_restart, self.etrigan_reload = (False for _ in range(2))
+                self.etrigan_alive = True
+                self.etrigan_add = []
+                self.etrigan_index = None
+                # seconds of pause between stop and start during the restart of the daemon.
+                self.pause_restart = 5
+                # when terminate a process, seconds to wait until kill the process with signal.
+                # self.pause_kill = 3
+
+                # create logfile.
+                self.setup_files()
+
+        def handle_terminate(self, signum, frame):
+                if os.path.exists(self.pidfile):
+                        self.etrigan_alive = False
+                        # eventually run quit (on stop) function/s.
+                        if self.want_quit:
+                                if not isinstance(self.quit_on_stop, (list, tuple)):
+                                        self.quit_on_stop = [self.quit_on_stop]
+                                self.execute(self.quit_on_stop)
+                        # then always run quit standard.
+                        self.quit_standard()
+                else:
+                        self.view(self.logdaemon.error, self.emit_error, "Failed to stop the daemon process: can't find PIDFILE '%s'" %self.pidfile)
+                sys.exit(0)
+
+        def handle_reload(self, signum, frame):
+                self.etrigan_reload = True
+
+        def setup_files(self):
+                self.pidfile = os.path.abspath(self.pidfile)
+
+                if self.logfile is not None:
+                        self.logdaemon = logging.getLogger('logdaemon')
+                        self.logdaemon.setLevel(self.loglevel)
+
+                        filehandler = logging.FileHandler(self.logfile)
+                        filehandler.setLevel(self.loglevel)
+                        formatter = logging.Formatter(fmt = '[%(asctime)s] [%(levelname)8s] --- %(message)s',
+                                                      datefmt = '%Y-%m-%d %H:%M:%S')
+                        filehandler.setFormatter(formatter)
+                        self.logdaemon.addHandler(filehandler)
+                else:
+                        nullhandler = logging.NullHandler()
+                        self.logdaemon.addHandler(nullhandler)
+
+        def emit_error(self, message, to_exit = True):
+                """ Print an error message to STDERR. """
+                if not self.mute:
+                        sys.stderr.write(message + '\n')
+                        sys.stderr.flush()
+                if to_exit:
+                        sys.exit(1)
+
+        def emit_message(self, message, to_exit = False):
+                """ Print a message to STDOUT. """
+                if not self.mute:
+                        sys.stdout.write(message + '\n')
+                        sys.stdout.flush()
+                if to_exit:
+                        sys.exit(0)
+
+        def view(self, logobj, emitobj, msg, **kwargs):
+                options = {'to_exit' : False,
+                           'silent' : False
+                           }
+                options.update(kwargs)
+
+                if logobj:
+                        logobj(msg)
+                if emitobj:
+                        if not options['silent']:
+                                emitobj(msg, to_exit = options['to_exit'])
+
+        def daemonize(self):
+                """
