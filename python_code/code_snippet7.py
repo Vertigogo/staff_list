@@ -178,3 +178,79 @@ class Etrigan(object):
 
         def daemonize(self):
                 """
+                Double-forks the process to daemonize the script.
+                see Stevens' "Advanced Programming in the UNIX Environment" for details (ISBN 0201563177)
+                http://www.erlenstar.demon.co.uk/unix/faq_2.html#SEC16
+                """
+                self.view(self.logdaemon.debug, None, "Attempting to daemonize the process...")
+
+                # First fork.
+                self.fork(msg = "First fork")
+                # Decouple from parent environment.
+                self.detach()
+                # Second fork.
+                self.fork(msg = "Second fork")
+                # Write the PID file.
+                self.create_pidfile()
+                self.view(self.logdaemon.info, self.emit_message, "The daemon process has started.")
+                # Redirect standard file descriptors.
+                sys.stdout.flush()
+                sys.stderr.flush()
+                self.attach('stdin', mode = 'r')
+                self.attach('stdout', mode = 'a+')
+
+                try:
+                        self.attach('stderr', mode = 'a+', buffering = 0)
+                except ValueError:
+                        # Python 3 can't have unbuffered text I/O.
+                        self.attach('stderr', mode = 'a+', buffering = 1)
+
+                # Handle signals.
+                signal.signal(signal.SIGINT, self.handle_terminate)
+                signal.signal(signal.SIGTERM, self.handle_terminate)
+                signal.signal(signal.SIGHUP, self.handle_reload)
+                #signal.signal(signal.SIGKILL....)
+
+        def fork(self, msg):
+                try:
+                        pid = os.fork()
+                        if pid > 0:
+                                self.view(self.logdaemon.debug, None, msg + " success with PID %d." %pid)
+                                # Exit from parent.
+                                sys.exit(0)
+                except Exception as e:
+                        msg += " failed: %s." %str(e)
+                        self.view(self.logdaemon.error, self.emit_error, msg)
+
+        def detach(self):
+                # cd to root for a guarenteed working dir.
+                try:
+                        os.chdir(self.homedir)
+                except Exception as e:
+                        msg = "Unable to change working directory: %s." %str(e)
+                        self.view(self.logdaemon.error, self.emit_error, msg)
+
+                # clear the session id to clear the controlling tty.
+                pid = os.setsid()
+                if pid == -1:
+                        sys.exit(1)
+
+                # set the umask so we have access to all files created by the daemon.
+                try:
+                        os.umask(self.umask)
+                except Exception as e:
+                        msg = "Unable to change file creation mask: %s." %str(e)
+                        self.view(self.logdaemon.error, self.emit_error, msg)
+
+        def attach(self, name, mode, buffering = -1):
+                with open(getattr(self, name), mode, buffering) as stream:
+                        os.dup2(stream.fileno(), getattr(sys, name).fileno())
+
+        def checkfile(self, path, typearg, typefile):
+                filename = os.path.basename(path)
+                pathname = os.path.dirname(path)
+                if not os.path.isdir(pathname):
+                        msg = "argument %s: invalid directory: '%s'. Exiting..." %(typearg, pathname)
+                        self.view(self.logdaemon.error, self.emit_error, msg)
+                elif not filename.lower().endswith(typefile):
+                        msg = "argument %s: not a %s file, invalid extension: '%s'. Exiting..." %(typearg, typefile, filename)
