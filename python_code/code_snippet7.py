@@ -343,3 +343,97 @@ class Etrigan(object):
                 pid = self.get_pidfile()
                 self.logdaemon.disabled = False
                 if not pid:
+                        # Just to be sure. A ValueError might occur
+                        # if the PIDFILE is empty but does actually exist.
+                        if os.path.exists(self.pidfile):
+                                self.delete_pidfile(pid)
+
+                        msg = "Can't find the daemon process with PIDFILE '%s'. Daemon not running ?" %self.pidfile
+                        self.view(self.logdaemon.warning, self.emit_error, msg, to_exit = False)
+                        return
+
+                # Try to kill the daemon process.
+                try:
+                        while True:
+                                os.kill(pid, signal.SIGTERM)
+                                time.sleep(0.1)
+                except Exception as e:
+                        if (e.errno != errno.ESRCH):
+                                self.view(self.logdaemon.error, self.emit_error, "Failed to stop the daemon process: %s" %str(e))
+                        else:
+                                self.view(None, self.emit_message, "The daemon process has ended correctly.", silent = self.etrigan_restart)
+
+        def restart(self):
+                """ Restart the daemon. """
+                self.view(self.logdaemon.info, self.emit_message, "Restarting the daemon process...")
+                self.etrigan_restart = True
+                self.stop()
+                if self.pause_restart:
+                        time.sleep(self.pause_restart)
+                        self.etrigan_alive = True
+                self.start()
+
+        def reload(self):
+                pass
+
+        def status(self):
+                """ Get status of the daemon. """
+                self.view(self.logdaemon.info, self.emit_message, "Viewing the daemon process status...")
+
+                if self.pidfile is None:
+                        self.view(self.logdaemon.error, self.emit_error, "Cannot get the status of daemon without PIDFILE.")
+
+                pid = self.get_pidfile()
+                if pid is None:
+                        self.view(self.logdaemon.info, self.emit_message, "The daemon process is not running.", to_exit = True)
+                else:
+                        try:
+                                with open("/proc/%d/status" %pid, 'r') as pf:
+                                        pass
+                                self.view(self.logdaemon.info, self.emit_message, "The daemon process is running.", to_exit = True)
+                        except Exception as e:
+                                msg = "There is not a process with the PIDFILE '%s': %s" %(self.pidfile, str(e))
+                                self.view(self.logdaemon.error, self.emit_error, msg)
+
+        def flatten(self, alistoflists, ltypes = Sequence):
+                # https://stackoverflow.com/questions/2158395/flatten-an-irregular-list-of-lists/2158532#2158532
+                alistoflists = list(alistoflists)
+                while alistoflists:
+                        while alistoflists and isinstance(alistoflists[0], ltypes):
+                                alistoflists[0:1] = alistoflists[0]
+                        if alistoflists: yield alistoflists.pop(0)
+
+        def exclude(self, func):
+                from inspect import getargspec
+                args = getargspec(func)
+                if callable(func):
+                        try:
+                                args[0].pop(0)
+                        except IndexError:
+                                pass
+                        return args
+                else:
+                        self.view(self.logdaemon.error, self.emit_error, "Not a function.")
+                        return
+
+        def execute(self, some_functions):
+                returned = None
+                if isinstance(some_functions, (list, tuple)):
+                        for func in some_functions:
+                                l_req = len(self.exclude(func)[0])
+
+                                if l_req == 0:
+                                        returned = func()
+                                else:
+                                        l_add = len(self.etrigan_add)
+                                        if l_req > l_add:
+                                                self.view(self.logdaemon.error, self.emit_error,
+                                                          "Can't evaluate function: given %s, required %s." %(l_add, l_req))
+                                                return
+                                        else:
+                                                arguments = self.etrigan_add[self.etrigan_index]
+                                                l_args = (len(arguments) if isinstance(arguments, list) else 1)
+                                                if (l_args > l_req) or (l_args < l_req):
+                                                        self.view(self.logdaemon.error, self.emit_error,
+                                                                  "Can't evaluate function: given %s, required %s." %(l_args, l_req))
+                                                        return
