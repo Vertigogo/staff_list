@@ -437,3 +437,75 @@ class Etrigan(object):
                                                         self.view(self.logdaemon.error, self.emit_error,
                                                                   "Can't evaluate function: given %s, required %s." %(l_args, l_req))
                                                         return
+                                                else:
+                                                        if isinstance(arguments, list):
+                                                                returned = func(*arguments)
+                                                        else:
+                                                                returned = func(arguments)
+
+                                if returned:
+                                        if isinstance(returned, (list, tuple)):
+                                                if isinstance(returned[0], int):
+                                                        self.etrigan_index = returned[0]
+                                                else:
+                                                        self.etrigan_index = slice(*map(int, returned[0].split(':')))
+                                                if returned[1:] != []:
+                                                        self.etrigan_add.append(returned[1:])
+                                                        self.etrigan_add = list(self.flatten(self.etrigan_add))
+                                        else:
+                                                self.view(self.logdaemon.error, self.emit_error, "Function should return list or tuple.")
+                                        returned = None
+                else:
+                        if some_functions is None:
+                                self.run()
+
+        def loop(self):
+                try:
+                        if self.pause_loop is None:
+                                # one-shot.
+                                self.execute(self.funcs_to_daemonize)
+                        else:
+                                if self.pause_loop >= 0:
+                                        # infinite with pause.
+                                        time.sleep(self.pause_loop)
+                                        while self.etrigan_alive:
+                                                self.execute(self.funcs_to_daemonize)
+                                                time.sleep(self.pause_loop)
+                                elif self.pause_loop == -1:
+                                        # infinite without pause.
+                                        while self.etrigan_alive:
+                                                self.execute(self.funcs_to_daemonize)
+                except Exception as e:
+                        msg = "The daemon process start method failed: %s" %str(e)
+                        self.view(self.logdaemon.error, self.emit_error, msg)
+
+        def quit_standard(self):
+                self.view(self.logdaemon.info, None, "Stopping the daemon process...")
+                self.delete_pidfile(self.get_pidfile())
+                self.view(self.logdaemon.info, None, "The daemon process has ended correctly.")
+
+        def quit_on_start(self):
+                """
+                Override this method when you subclass Daemon.
+                """
+                self.quit_standard()
+
+        def quit_on_stop(self):
+                """
+                Override this method when you subclass Daemon.
+                """
+                pass
+
+        def run(self):
+                """
+                Override this method when you subclass Daemon.
+                It will be called after the process has been
+                daemonized by start() or restart().
+                """
+                pass
+
+#-----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class JasonBlood(Etrigan):
+        def run(self):
+                jasonblood_func()
