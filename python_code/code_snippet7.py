@@ -509,3 +509,72 @@ class Etrigan(object):
 class JasonBlood(Etrigan):
         def run(self):
                 jasonblood_func()
+
+def jasonblood_func():
+        with open(os.path.join(path, 'etrigan_test.txt'), 'a') as file:
+                file.write("Yarva Demonicus Etrigan " + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + '\n')
+
+def Etrigan_parser(parser = None):
+        if parser is None:
+                # create a new parser.
+                parser = argparse.ArgumentParser(description = __description__, epilog = __version__)
+        if not parser.add_help:
+                # create help argument.
+                parser.add_argument("-h", "--help", action = "help", help = "show this help message and exit")
+
+        # attach to an existent parser.
+        parser.add_argument("operation", action = "store", choices = ["start", "stop", "restart", "status", "reload"],
+                            help = "Select an operation for daemon.", type = str)
+        parser.add_argument("--etrigan-pid",
+                            action = "store", dest = "etriganpid", default = "/tmp/etrigan.pid",
+                            help = "Choose a pidfile path. Default is \"/tmp/etrigan.pid\".", type = str) #'/var/run/etrigan.pid'
+        parser.add_argument("--etrigan-log",
+                            action = "store", dest = "etriganlog", default = os.path.join(path, "etrigan.log"),
+                            help = "Use this option to choose an output log file; for not logging don't select it. Default is \"etrigan.log\".", type = str)
+        parser.add_argument("--etrigan-lev",
+                            action = "store", dest = "etriganlev", default = "DEBUG",
+                            choices = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+                            help = "Use this option to set a log level. Default is \"DEBUG\".", type = str)
+        parser.add_argument("--etrigan-mute",
+                            action = "store_const", dest = 'etriganmute', const = True, default = False,
+                            help = "Disable all stdout and stderr messages.")
+        return parser
+
+class Etrigan_check(object):
+        def emit_opt_err(self, msg):
+                print(msg)
+                sys.exit(1)
+
+        def checkfile(self, path, typearg, typefile):
+                filename, extension = os.path.splitext(path)
+                pathname = os.path.dirname(path)
+                if not os.path.isdir(pathname):
+                        msg = "argument `%s`: invalid directory: '%s'. Exiting..." %(typearg, pathname)
+                        self.emit_opt_err(msg)
+                elif not extension == typefile:
+                        msg = "argument `%s`: not a %s file, invalid extension: '%s'. Exiting..." %(typearg, typefile, extension)
+                        self.emit_opt_err(msg)
+
+        def checkfunction(self, funcs, booleans):
+                if not isinstance(funcs, (list, tuple)):
+                        if funcs is not None:
+                                msg = "argument `funcs_to_daemonize`: provide list, tuple or None"
+                                self.emit_opt_err(msg)
+
+                for elem in booleans:
+                        if not type(elem) == bool:
+                                msg = "argument `want_quit`: not a boolean."
+                                self.emit_opt_err(msg)
+
+def Etrigan_job(type_oper, daemon_obj):
+        Etrigan_check().checkfunction(daemon_obj.funcs_to_daemonize,
+                                      [daemon_obj.want_quit])
+        if type_oper == "start":
+                daemon_obj.start()
+        elif type_oper == "stop":
+                daemon_obj.stop()
+        elif type_oper == "restart":
+                daemon_obj.restart()
+        elif type_oper == "status":
+                daemon_obj.status()
+        elif type_oper == "reload":
