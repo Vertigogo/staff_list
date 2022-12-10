@@ -254,3 +254,92 @@ class Etrigan(object):
                         self.view(self.logdaemon.error, self.emit_error, msg)
                 elif not filename.lower().endswith(typefile):
                         msg = "argument %s: not a %s file, invalid extension: '%s'. Exiting..." %(typearg, typefile, filename)
+                        self.view(self.logdaemon.error, self.emit_error, msg)
+
+        def create_pidfile(self):
+                atexit.register(self.delete_pidfile)
+                pid = os.getpid()
+                try:
+                        with open(self.pidfile, 'w+') as pf:
+                             pf.write("%s\n" %pid)
+                        self.view(self.logdaemon.debug, None, "PID %d written to '%s'." %(pid, self.pidfile))
+                except Exception as e:
+                        msg = "Unable to write PID to PIDFILE '%s': %s" %(self.pidfile, str(e))
+                        self.view(self.logdaemon.error, self.emit_error, msg)
+
+        def delete_pidfile(self, pid):
+                # Remove the PID file.
+                try:
+                        os.remove(self.pidfile)
+                        self.view(self.logdaemon.debug, None, "Removing PIDFILE '%s' with PID %d." %(self.pidfile, pid))
+                except Exception as e:
+                        if e.errno != errno.ENOENT:
+                                self.view(self.logdaemon.error, self.emit_error, str(e))
+
+        def get_pidfile(self):
+                # Get the PID from the PID file.
+                if self.pidfile is None:
+                        return None
+                if not os.path.isfile(self.pidfile):
+                        return None
+
+                try:
+                        with open(self.pidfile, 'r') as pf:
+                                pid = int(pf.read().strip())
+                        self.view(self.logdaemon.debug, None, "Found PID %d in PIDFILE '%s'" %(pid, self.pidfile))
+                except Exception as e:
+                        self.view(self.logdaemon.warning, None, "Empty or broken PIDFILE")
+                        pid = None
+
+                def pid_exists(pid):
+                        # psutil _psposix.py.
+                        if pid == 0:
+                                return True
+                        try:
+                                os.kill(pid, 0)
+                        except OSError as e:
+                                if e.errno == errno.ESRCH:
+                                        return False
+                                elif e.errno == errno.EPERM:
+                                        return True
+                                else:
+                                        self.view(self.logdaemon.error, self.emit_error, str(e))
+                        else:
+                                return True
+
+                if pid is not None and pid_exists(pid):
+                        return pid
+                else:
+                        # Remove the stale PID file.
+                        self.delete_pidfile(pid)
+                        return None
+
+        def start(self):
+                """ Start the daemon. """
+                self.view(self.logdaemon.info, self.emit_message, "Starting the daemon process...", silent = self.etrigan_restart)
+
+                # Check for a PID file to see if the Daemon is already running.
+                pid = self.get_pidfile()
+                if pid is not None:
+                        msg = "A previous daemon process with PIDFILE '%s' already exists. Daemon already running ?" %self.pidfile
+                        self.view(self.logdaemon.warning, self.emit_error, msg, to_exit = False)
+                        return
+
+                # Daemonize the main process.
+                self.daemonize()
+                # Start a infinitive loop that periodically runs `funcs_to_daemonize`.
+                self.loop()
+                # eventualy run quit (on start) function/s.
+                if self.want_quit:
+                        if not isinstance(self.quit_on_start, (list, tuple)):
+                                self.quit_on_start = [self.quit_on_start]
+                        self.execute(self.quit_on_start)
+
+        def stop(self):
+                """ Stop the daemon. """
+                self.view(None, self.emit_message, "Stopping the daemon process...", silent = self.etrigan_restart)
+
+                self.logdaemon.disabled = True
+                pid = self.get_pidfile()
+                self.logdaemon.disabled = False
+                if not pid:
