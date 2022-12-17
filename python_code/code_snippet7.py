@@ -578,3 +578,27 @@ def Etrigan_job(type_oper, daemon_obj):
         elif type_oper == "status":
                 daemon_obj.status()
         elif type_oper == "reload":
+                daemon_obj.reload()
+        sys.exit(0)
+
+def main():
+        # Parse arguments.
+        parser = Etrigan_parser()
+        args = vars(parser.parse_args())
+        # Check arguments.
+        Etrigan_check().checkfile(args['etriganpid'], 'pidfile', '.pid')
+        Etrigan_check().checkfile(args['etriganlog'], 'pidfile', '.log')
+
+        # Setup daemon.
+        jasonblood_1 = Etrigan(pidfile = args['etriganpid'], logfile = args['etriganlog'], loglevel = args['etriganlev'],
+                               mute = args['etriganmute'],
+                               funcs_to_daemonize = [jasonblood_func], pause_loop = 5)
+
+##        jasonblood_2 = JasonBlood(pidfile = args['etriganpid'], logfile = args['etriganlog'], loglevel = args['etriganlev'],
+##                                  mute = args['etriganmute'],
+##                                  funcs_to_daemonize = None, pause_loop = 5)
+        # Do job.
+        Etrigan_job(args['operation'], jasonblood_1)
+
+if __name__ == '__main__':
+        main()
