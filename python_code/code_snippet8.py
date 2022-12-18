@@ -72,3 +72,5 @@ class compose(object):  # pylint: disable=invalid-name
 # Portability to some minimal Python implementations:
 try:
     compose.__name__
+except AttributeError:
+    compose.__name__ = 'compose'
