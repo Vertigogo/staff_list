@@ -27,4 +27,7 @@ from .wgrib2 import MemoryBuffer, wgrib, free_files
 from .inventory import MetaData
 from .template import Template
 
-logger
+logger = logging.getLogger(__name__)
+
+# wgrib2 returns C float arrays
+DTYPE = np.dt
