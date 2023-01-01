@@ -24,3 +24,7 @@ from xarray.backends.locks import SerializableLock
 
 from . import UNDEFINED, _Variable, WgribError
 from .wgrib2 import MemoryBuffer, wgrib, free_files
+from .inventory import MetaData
+from .template import Template
+
+logger
