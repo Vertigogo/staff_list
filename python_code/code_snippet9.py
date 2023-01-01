@@ -16,4 +16,8 @@ from typing import (
 
 try:
     from numpy.typing import ArrayLike
-except Impor
+except ImportError:
+    ArrayLike = Any
+
+import numpy as np
+from xarray.backends.locks import SerializableLoc
