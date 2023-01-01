@@ -10,3 +10,10 @@ from typing import (
     NamedTuple,
     Sequence,
     Tuple,
+    Union,
+    cast,
+)
+
+try:
+    from numpy.typing import ArrayLike
+except Impor
