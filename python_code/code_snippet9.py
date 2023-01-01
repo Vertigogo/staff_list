@@ -20,4 +20,7 @@ except ImportError:
     ArrayLike = Any
 
 import numpy as np
-from xarray.backends.locks import SerializableLoc
+from xarray.backends.locks import SerializableLock
+
+from . import UNDEFINED, _Variable, WgribError
+from .wgrib2 import MemoryBuffer, wgrib, free_files
