@@ -30,4 +30,8 @@ from .template import Template
 logger = logging.getLogger(__name__)
 
 # wgrib2 returns C float arrays
-DTYPE = np.dt
+DTYPE = np.dtype("float32")
+
+
+HeaderIndices = Tuple[int, ...]
+FileIndex = DefaultDict[str, Dict[HeaderIn
