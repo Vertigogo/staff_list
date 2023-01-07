@@ -40,4 +40,7 @@ FileIndices = DefaultDict[str, FileIndex]  # variable name -> FileIndex
 WGRIB2_LOCK = SerializableLock()
 
 
-class Dataset(Name
+class Dataset(NamedTuple):
+    dims: Dict[str, int]
+    vars: Dict[str, _Variable]
+    attrs: Dict[s
