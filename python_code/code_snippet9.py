@@ -35,4 +35,9 @@ DTYPE = np.dtype("float32")
 
 HeaderIndices = Tuple[int, ...]
 FileIndex = DefaultDict[str, Dict[HeaderIndices, str]]  # file -> Dict
-FileIndices = DefaultDict[str, FileIndex]  # variable name
+FileIndices = DefaultDict[str, FileIndex]  # variable name -> FileIndex
+
+WGRIB2_LOCK = SerializableLock()
+
+
+class Dataset(Name
