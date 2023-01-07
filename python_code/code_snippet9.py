@@ -34,4 +34,5 @@ DTYPE = np.dtype("float32")
 
 
 HeaderIndices = Tuple[int, ...]
-FileIndex = DefaultDict[str, Dict[HeaderIn
+FileIndex = DefaultDict[str, Dict[HeaderIndices, str]]  # file -> Dict
+FileIndices = DefaultDict[str, FileIndex]  # variable name
