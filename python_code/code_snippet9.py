@@ -43,4 +43,8 @@ WGRIB2_LOCK = SerializableLock()
 class Dataset(NamedTuple):
     dims: Dict[str, int]
     vars: Dict[str, _Variable]
-    attrs: Dict[s
+    attrs: Dict[str, Any]
+
+
+def find_1st(array, value):
+    return np.nonzero(array == value)[0][0]
