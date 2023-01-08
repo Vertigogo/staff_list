@@ -48,3 +48,9 @@ class Dataset(NamedTuple):
 
 def find_1st(array, value):
     return np.nonzero(array == value)[0][0]
+
+
+def build_file_index(
+    items: Sequence[MetaData],
+    template: Template,
+) -> FileIndices:
