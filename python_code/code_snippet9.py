@@ -58,4 +58,6 @@ def build_file_index(
     for item in (i for i in items if template.item_match(i)):
         varname = template.item_to_varname(item)
         try:
-            specs = template.var_specs[v
+            specs = template.var_specs[varname]
+        except KeyError:
+            logger.info("Variable {!s} not found 
