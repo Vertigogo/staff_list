@@ -60,4 +60,6 @@ def build_file_index(
         try:
             specs = template.var_specs[varname]
         except KeyError:
-            logger.info("Variable {!s} not found 
+            logger.info("Variable {!s} not found in template, skipping".format(varname))
+            continue
+        time_c
