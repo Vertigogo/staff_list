@@ -62,4 +62,6 @@ def build_file_index(
         except KeyError:
             logger.info("Variable {!s} not found in template, skipping".format(varname))
             continue
-        time_c
+        time_coord = specs.time_coord
+        level_coord = specs.level_coord
+        fcst_time = item.end_ft
