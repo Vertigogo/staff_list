@@ -56,4 +56,6 @@ def build_file_index(
 ) -> FileIndices:
     file_indices: FileIndices = defaultdict(cast(Callable, partial(defaultdict, dict)))
     for item in (i for i in items if template.item_match(i)):
-        varname = template
+        varname = template.item_to_varname(item)
+        try:
+            specs = template.var_specs[v
