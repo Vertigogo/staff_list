@@ -54,4 +54,6 @@ def build_file_index(
     items: Sequence[MetaData],
     template: Template,
 ) -> FileIndices:
-    file_indices: FileIndices = defaultdict(cast(Callable, partial(defaultdict, dict))
+    file_indices: FileIndices = defaultdict(cast(Callable, partial(defaultdict, dict)))
+    for item in (i for i in items if template.item_match(i)):
+        varname = template
