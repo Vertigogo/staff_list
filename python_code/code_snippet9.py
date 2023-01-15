@@ -64,4 +64,7 @@ def build_file_index(
             continue
         time_coord = specs.time_coord
         level_coord = specs.level_coord
-        fcst_time = item.end_ft
+        fcst_time = item.end_ft - item.reftime
+        header_indices: Tuple[int, ...] = ()
+        found = True
+   
