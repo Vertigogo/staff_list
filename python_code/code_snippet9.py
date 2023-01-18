@@ -67,4 +67,6 @@ def build_file_index(
         fcst_time = item.end_ft - item.reftime
         header_indices: Tuple[int, ...] = ()
         found = True
-   
+        if time_coord in specs.dims:
+            try:
+                i = find_
