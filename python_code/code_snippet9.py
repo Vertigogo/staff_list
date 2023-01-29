@@ -71,4 +71,7 @@ def build_file_index(
             try:
                 i = find_1st(template.coords[time_coord].data, fcst_time)
                 header_indices = (i,)
-      
+            except IndexError:
+                found = False
+        else:
+            if templat
