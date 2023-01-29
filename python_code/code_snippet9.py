@@ -74,4 +74,6 @@ def build_file_index(
             except IndexError:
                 found = False
         else:
-            if templat
+            if template.coords[time_coord].data != fcst_time:
+                found = False
+      
