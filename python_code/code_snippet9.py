@@ -69,4 +69,6 @@ def build_file_index(
         found = True
         if time_coord in specs.dims:
             try:
-                i = find_
+                i = find_1st(template.coords[time_coord].data, fcst_time)
+                header_indices = (i,)
+      
