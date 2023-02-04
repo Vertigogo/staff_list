@@ -76,4 +76,6 @@ def build_file_index(
         else:
             if template.coords[time_coord].data != fcst_time:
                 found = False
-      
+        if not found:
+            logger.info(
+                "Variable {:s} forecast time {!r} not found
