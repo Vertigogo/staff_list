@@ -78,4 +78,6 @@ def build_file_index(
                 found = False
         if not found:
             logger.info(
-                "Variable {:s} forecast time {!r} not found
+                "Variable {:s} forecast time {!r} not found in template, "
+                "skipping".format(varname, fcst_time)
+        
