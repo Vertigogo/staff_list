@@ -80,4 +80,7 @@ def build_file_index(
             logger.info(
                 "Variable {:s} forecast time {!r} not found in template, "
                 "skipping".format(varname, fcst_time)
-        
+            )
+            continue
+        if level_coord in specs.dims:
+           
