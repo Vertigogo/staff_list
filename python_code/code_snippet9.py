@@ -84,4 +84,6 @@ def build_file_index(
             continue
         if level_coord in specs.dims:
             try:
-                i = find_1st(template.coords[level_coord].data, item.level_va
+                i = find_1st(template.coords[level_coord].data, item.level_value)
+                header_indices += (i,)
+            except IndexError:
