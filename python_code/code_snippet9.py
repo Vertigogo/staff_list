@@ -88,4 +88,6 @@ def build_file_index(
                 header_indices += (i,)
             except IndexError:
                 logger.info(
-                    "Variable {:s} level {!r} not found in 
+                    "Variable {:s} level {!r} not found in template, "
+                    "skipping".format(varname, item.level_value)
+                )
