@@ -87,3 +87,5 @@ def build_file_index(
                 i = find_1st(template.coords[level_coord].data, item.level_value)
                 header_indices += (i,)
             except IndexError:
+                logger.info(
+                    "Variable {:s} level {!r} not found in 
