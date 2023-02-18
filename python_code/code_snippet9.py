@@ -92,4 +92,8 @@ def build_file_index(
                     "skipping".format(varname, item.level_value)
                 )
                 continue
-        file_indices[varname][item.file][head
+        file_indices[varname][item.file][header_indices] = item.offset
+    return file_indices
+
+
+def expand_item(item: Sequence[Any], shape: T
