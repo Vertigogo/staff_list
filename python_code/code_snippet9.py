@@ -91,3 +91,5 @@ def build_file_index(
                     "Variable {:s} level {!r} not found in template, "
                     "skipping".format(varname, item.level_value)
                 )
+                continue
+        file_indices[varname][item.file][head
