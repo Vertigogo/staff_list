@@ -98,4 +98,6 @@ def build_file_index(
 
 def expand_item(item: Sequence[Any], shape: Tuple[int, ...]) -> Tuple[List[Any], ...]:
     expanded_item = []
-    for i, 
+    for i, size in zip(item, shape):
+        if isinstance(i, list):
+            expanded_item.ap
