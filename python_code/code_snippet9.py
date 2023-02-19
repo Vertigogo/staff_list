@@ -96,4 +96,6 @@ def build_file_index(
     return file_indices
 
 
-def expand_item(item: Sequence[Any], shape: T
+def expand_item(item: Sequence[Any], shape: Tuple[int, ...]) -> Tuple[List[Any], ...]:
+    expanded_item = []
+    for i, 
