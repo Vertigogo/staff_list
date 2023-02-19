@@ -100,4 +100,6 @@ def expand_item(item: Sequence[Any], shape: Tuple[int, ...]) -> Tuple[List[Any],
     expanded_item = []
     for i, size in zip(item, shape):
         if isinstance(i, list):
-            expanded_item.ap
+            expanded_item.append(i)
+        elif isinstance(i, np.ndarray):
+            expanded_item.append(i.t
