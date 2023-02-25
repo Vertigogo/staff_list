@@ -102,4 +102,6 @@ def expand_item(item: Sequence[Any], shape: Tuple[int, ...]) -> Tuple[List[Any],
         if isinstance(i, list):
             expanded_item.append(i)
         elif isinstance(i, np.ndarray):
-            expanded_item.append(i.t
+            expanded_item.append(i.tolist())
+        elif isinstance(i, slice):
+            expanded_item.append(list(range(i.start
