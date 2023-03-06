@@ -108,4 +108,8 @@ def expand_item(item: Sequence[Any], shape: Tuple[int, ...]) -> Tuple[List[Any],
         elif isinstance(i, int):
             expanded_item.append([i])
         else:
-            raise TypeError("Unsupported index t
+            raise TypeError("Unsupported index type {!r}".format(type(i)))
+    return tuple(expanded_item)
+
+
+class OnDiskArray
