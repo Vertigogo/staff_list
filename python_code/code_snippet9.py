@@ -112,4 +112,8 @@ def expand_item(item: Sequence[Any], shape: Tuple[int, ...]) -> Tuple[List[Any],
     return tuple(expanded_item)
 
 
-class OnDiskArray
+class OnDiskArray:
+    def __init__(
+        self,
+        varname: str,
+        file_index: Fi
