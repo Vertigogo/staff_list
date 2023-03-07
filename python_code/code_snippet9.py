@@ -116,4 +116,8 @@ class OnDiskArray:
     def __init__(
         self,
         varname: str,
-        file_index: Fi
+        file_index: FileIndex,
+        shape: Sequence[int],
+        template: Template,
+    ) -> None:
+      
