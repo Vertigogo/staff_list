@@ -122,4 +122,6 @@ class OnDiskArray:
     ) -> None:
         self.varname = varname
         self.file_index = file_index
-        self.shape = t
+        self.shape = tuple(shape)
+        self.geo_ndim = len(template.grid.dims)
+        self.npts = np.prod(s
