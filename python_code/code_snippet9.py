@@ -120,4 +120,6 @@ class OnDiskArray:
         shape: Sequence[int],
         template: Template,
     ) -> None:
-      
+        self.varname = varname
+        self.file_index = file_index
+        self.shape = t
