@@ -124,4 +124,6 @@ class OnDiskArray:
         self.file_index = file_index
         self.shape = tuple(shape)
         self.geo_ndim = len(template.grid.dims)
-        self.npts = np.prod(s
+        self.npts = np.prod(shape[-self.geo_ndim :])
+        self.missing_value = UNDEFINED  # wgrib2 missing value
+        s
