@@ -126,4 +126,7 @@ class OnDiskArray:
         self.geo_ndim = len(template.grid.dims)
         self.npts = np.prod(shape[-self.geo_ndim :])
         self.missing_value = UNDEFINED  # wgrib2 missing value
-        s
+        self.dtype = DTYPE
+
+    def __getitem__(self, item: Tuple[Any, ...]) -> ArrayLike:
+     
