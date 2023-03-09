@@ -129,4 +129,5 @@ class OnDiskArray:
         self.dtype = DTYPE
 
     def __getitem__(self, item: Tuple[Any, ...]) -> ArrayLike:
-     
+        assert isinstance(item, tuple), "Item type must be tuple not {!r}".format(
+            t
