@@ -136,4 +136,6 @@ class OnDiskArray:
             len(self.shape), len(item)
         )
 
-        header_item = expand_item
+        header_item = expand_item(item[: -self.geo_ndim], self.shape)
+        array_field_shape = (
+            tuple(len(i
