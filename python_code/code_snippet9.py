@@ -132,4 +132,8 @@ class OnDiskArray:
         assert isinstance(item, tuple), "Item type must be tuple not {!r}".format(
             type(item)
         )
-        assert len(item) == len(self.shape), "Item len must be {!r} not {!r}".f
+        assert len(item) == len(self.shape), "Item len must be {!r} not {!r}".format(
+            len(self.shape), len(item)
+        )
+
+        header_item = expand_item
