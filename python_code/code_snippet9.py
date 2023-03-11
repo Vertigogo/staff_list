@@ -138,4 +138,6 @@ class OnDiskArray:
 
         header_item = expand_item(item[: -self.geo_ndim], self.shape)
         array_field_shape = (
-            tuple(len(i
+            tuple(len(i) for i in header_item) + self.shape[-self.geo_ndim :]
+        )
+        arr
