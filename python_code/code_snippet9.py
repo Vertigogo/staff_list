@@ -142,4 +142,6 @@ class OnDiskArray:
         )
         array_field = np.full(array_field_shape, fill_value=np.nan, dtype=DTYPE)
         datasize = self.npts * array_field.dtype.itemsize
-        for file, index in self.file_i
+        for file, index in self.file_index.items():
+            # Faster, longer code
+            def _get_array_indexe
