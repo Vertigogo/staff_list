@@ -140,4 +140,5 @@ class OnDiskArray:
         array_field_shape = (
             tuple(len(i) for i in header_item) + self.shape[-self.geo_ndim :]
         )
-        arr
+        array_field = np.full(array_field_shape, fill_value=np.nan, dtype=DTYPE)
+        datasize =
