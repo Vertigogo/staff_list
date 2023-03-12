@@ -144,4 +144,7 @@ class OnDiskArray:
         datasize = self.npts * array_field.dtype.itemsize
         for file, index in self.file_index.items():
             # Faster, longer code
-            def _get_array_indexe
+            def _get_array_indexes():
+                for header_indices, offset in index.items():
+                    try:
+            
