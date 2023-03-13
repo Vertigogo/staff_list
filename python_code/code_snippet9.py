@@ -147,4 +147,5 @@ class OnDiskArray:
             def _get_array_indexes():
                 for header_indices, offset in index.items():
                     try:
-            
+                        afi = [
+                            it.index(ix) for it, ix in zip
