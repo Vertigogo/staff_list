@@ -148,4 +148,7 @@ class OnDiskArray:
                 for header_indices, offset in index.items():
                     try:
                         afi = [
-                            it.index(ix) for it, ix in zip
+                            it.index(ix) for it, ix in zip(header_item, header_indices)
+                        ]
+                        yield afi, offset
+ 
