@@ -151,4 +151,8 @@ class OnDiskArray:
                             it.index(ix) for it, ix in zip(header_item, header_indices)
                         ]
                         yield afi, offset
- 
+                    except ValueError:
+                        continue
+
+            try:
+    
