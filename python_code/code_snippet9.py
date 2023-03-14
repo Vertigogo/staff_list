@@ -155,4 +155,5 @@ class OnDiskArray:
                         continue
 
             try:
-    
+                seq_of_array_field_indexes, offsets = zip(*_get_array_indexes())
+        
