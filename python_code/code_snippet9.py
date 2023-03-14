@@ -156,4 +156,6 @@ class OnDiskArray:
 
             try:
                 seq_of_array_field_indexes, offsets = zip(*_get_array_indexes())
-        
+            except ValueError:
+                continue
+            inventory = MemoryBu
