@@ -158,4 +158,6 @@ class OnDiskArray:
                 seq_of_array_field_indexes, offsets = zip(*_get_array_indexes())
             except ValueError:
                 continue
-            inventory = MemoryBu
+            inventory = MemoryBuffer()
+            inventory.set("\n".join(offsets))
+            output = M
