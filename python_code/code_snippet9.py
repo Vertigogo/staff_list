@@ -164,4 +164,7 @@ class OnDiskArray:
             args = [
                 file,
                 "-rewind_init",
+                file,
+                "-i_file",
+                inventory,
                
