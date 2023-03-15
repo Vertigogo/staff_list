@@ -160,4 +160,8 @@ class OnDiskArray:
                 continue
             inventory = MemoryBuffer()
             inventory.set("\n".join(offsets))
-            output = M
+            output = MemoryBuffer()
+            args = [
+                file,
+                "-rewind_init",
+               
