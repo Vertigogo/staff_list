@@ -167,4 +167,7 @@ class OnDiskArray:
                 file,
                 "-i_file",
                 inventory,
+                "-rewind_init",
+                inventory,
+                "-inv",
                
