@@ -174,4 +174,7 @@ class OnDiskArray:
                 "-no_header",
                 "-bin",
                 output,
- 
+            ]
+            try:
+                wgrib(*args)
+                va
