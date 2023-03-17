@@ -170,4 +170,8 @@ class OnDiskArray:
                 "-rewind_init",
                 inventory,
                 "-inv",
-               
+                "/dev/null",
+                "-no_header",
+                "-bin",
+                output,
+ 
