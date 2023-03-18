@@ -181,4 +181,7 @@ class OnDiskArray:
             except WgribError as e:
                 logger.error("wgrib2 error: {:s}".format(str(e)))
                 output.close()
-          
+                continue
+            finally:
+                inventory.close()
+            
