@@ -179,4 +179,6 @@ class OnDiskArray:
                 wgrib(*args)
                 values = output.get("b")
             except WgribError as e:
-                logger.err
+                logger.error("wgrib2 error: {:s}".format(str(e)))
+                output.close()
+          
