@@ -184,4 +184,6 @@ class OnDiskArray:
                 continue
             finally:
                 inventory.close()
-            
+                output.close()
+                free_files(file)
+            for pos, array_f
