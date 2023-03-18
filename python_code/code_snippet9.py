@@ -177,4 +177,6 @@ class OnDiskArray:
             ]
             try:
                 wgrib(*args)
-                va
+                values = output.get("b")
+            except WgribError as e:
+                logger.err
