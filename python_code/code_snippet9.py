@@ -190,4 +190,7 @@ class OnDiskArray:
                 range(0, len(values), datasize), seq_of_array_field_indexes
             ):
                 chunk = np.frombuffer(values[pos : pos + datasize], dtype=DTYPE)
-                array_field.__getitem__(tuple(array_field_indexes)).flat[
+                array_field.__getitem__(tuple(array_field_indexes)).flat[:] = chunk
+
+        array = array_field[(Ellipsis,) + item[-self.geo_ndim :]]
+        ar
