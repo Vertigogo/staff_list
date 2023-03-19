@@ -188,3 +188,5 @@ class OnDiskArray:
                 free_files(file)
             for pos, array_field_indexes in zip(
                 range(0, len(values), datasize), seq_of_array_field_indexes
+            ):
+                chunk = np.frombuffer(values[pos : pos + datasize], 
