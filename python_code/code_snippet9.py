@@ -186,4 +186,5 @@ class OnDiskArray:
                 inventory.close()
                 output.close()
                 free_files(file)
-            for pos, array_f
+            for pos, array_field_indexes in zip(
+                range(0, len(values), datasize), seq_of_array_field_indexes
