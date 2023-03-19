@@ -189,4 +189,5 @@ class OnDiskArray:
             for pos, array_field_indexes in zip(
                 range(0, len(values), datasize), seq_of_array_field_indexes
             ):
-                chunk = np.frombuffer(values[pos : pos + datasize], 
+                chunk = np.frombuffer(values[pos : pos + datasize], dtype=DTYPE)
+                array_field.__getitem__(tuple(array_field_indexes)).flat[
