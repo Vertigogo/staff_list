@@ -193,4 +193,5 @@ class OnDiskArray:
                 array_field.__getitem__(tuple(array_field_indexes)).flat[:] = chunk
 
         array = array_field[(Ellipsis,) + item[-self.geo_ndim :]]
-        ar
+        array[array == self.missing_value] = np.nan
+        for i, it in reversed(list(enumera
