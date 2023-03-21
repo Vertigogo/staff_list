@@ -194,4 +194,6 @@ class OnDiskArray:
 
         array = array_field[(Ellipsis,) + item[-self.geo_ndim :]]
         array[array == self.missing_value] = np.nan
-        for i, it in reversed(list(enumera
+        for i, it in reversed(list(enumerate(item[: -self.geo_ndim]))):
+            if isinstance(it, int):
+         
