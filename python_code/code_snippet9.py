@@ -200,4 +200,8 @@ class OnDiskArray:
         return array
 
 
-def open_da
+def open_dataset(
+    items: Sequence[MetaData],
+    template: Template,
+) -> Union[Dataset, None]:
+    dim
