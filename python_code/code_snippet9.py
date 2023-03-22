@@ -206,4 +206,6 @@ def open_dataset(
 ) -> Union[Dataset, None]:
     dimensions: Dict[str, int] = {}
     variables: Dict[str, _Variable] = {}
-    file_indices = build_fi
+    file_indices = build_file_index(items, template)
+    if not file_indices:
+        logger.warning("No matching
