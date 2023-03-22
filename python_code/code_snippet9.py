@@ -204,4 +204,6 @@ def open_dataset(
     items: Sequence[MetaData],
     template: Template,
 ) -> Union[Dataset, None]:
-    dim
+    dimensions: Dict[str, int] = {}
+    variables: Dict[str, _Variable] = {}
+    file_indices = build_fi
