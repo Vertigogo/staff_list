@@ -212,4 +212,5 @@ def open_dataset(
         return Dataset(dimensions, variables, {})
     for name, file_index in file_indices.items():
         var_specs = template.var_specs[name]
-        data = OnDiskArray(
+        data = OnDiskArray(name, file_index, var_specs.shape, template)
+        variables[name] = _Variable(var_
