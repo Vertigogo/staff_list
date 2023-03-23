@@ -210,4 +210,6 @@ def open_dataset(
     if not file_indices:
         logger.warning("No matching data found")
         return Dataset(dimensions, variables, {})
-    for name, file_in
+    for name, file_index in file_indices.items():
+        var_specs = template.var_specs[name]
+        data = OnDiskArray(
