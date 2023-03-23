@@ -208,4 +208,6 @@ def open_dataset(
     variables: Dict[str, _Variable] = {}
     file_indices = build_file_index(items, template)
     if not file_indices:
-        logger.warning("No matching
+        logger.warning("No matching data found")
+        return Dataset(dimensions, variables, {})
+    for name, file_in
