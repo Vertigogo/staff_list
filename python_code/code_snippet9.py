@@ -214,4 +214,6 @@ def open_dataset(
         var_specs = template.var_specs[name]
         data = OnDiskArray(name, file_index, var_specs.shape, template)
         variables[name] = _Variable(var_specs.dims, data, var_specs.attrs)
-        dimensions.update({k: v for k, v in zip
+        dimensions.update({k: v for k, v in zip(var_specs.dims, var_specs.shape)})
+    variables.update(template.coords)
+    variabl
