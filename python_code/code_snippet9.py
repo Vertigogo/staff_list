@@ -219,3 +219,7 @@ def open_dataset(
     variables["reftime"] = _Variable(
         # reftime is the same for all items
         (),
+        np.array(items[0].reftime),
+        {"standard_name": "reference_time"},
+    )
+   
