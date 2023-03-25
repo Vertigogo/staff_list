@@ -216,4 +216,6 @@ def open_dataset(
         variables[name] = _Variable(var_specs.dims, data, var_specs.attrs)
         dimensions.update({k: v for k, v in zip(var_specs.dims, var_specs.shape)})
     variables.update(template.coords)
-    variabl
+    variables["reftime"] = _Variable(
+        # reftime is the same for all items
+        (),
