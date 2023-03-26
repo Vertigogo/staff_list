@@ -222,4 +222,5 @@ def open_dataset(
         np.array(items[0].reftime),
         {"standard_name": "reference_time"},
     )
-   
+    # Projection variable
+    variables[template.grid.cfname] = _Variable((), np.array(0), templa
