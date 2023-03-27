@@ -225,4 +225,7 @@ def open_dataset(
     # Projection variable
     variables[template.grid.cfname] = _Variable((), np.array(0), template.grid.attrs)
     attrs = template.attrs.copy()
-    attrs["coordinates"] = " "
+    attrs["coordinates"] = " ".join(
+        tuple(template.coords.keys()) + ("reftime", template.grid.cfname)
+    )
+    return
