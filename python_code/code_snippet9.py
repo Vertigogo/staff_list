@@ -228,4 +228,4 @@ def open_dataset(
     attrs["coordinates"] = " ".join(
         tuple(template.coords.keys()) + ("reftime", template.grid.cfname)
     )
-    return
+    return Dataset(dimensions, variables, attrs)
