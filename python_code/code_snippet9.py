@@ -223,4 +223,6 @@ def open_dataset(
         {"standard_name": "reference_time"},
     )
     # Projection variable
-    variables[template.grid.cfname] = _Variable((), np.array(0), templa
+    variables[template.grid.cfname] = _Variable((), np.array(0), template.grid.attrs)
+    attrs = template.attrs.copy()
+    attrs["coordinates"] = " "
