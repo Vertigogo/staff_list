@@ -7,4 +7,6 @@ import random
 '''
 Generates a stream of random hexidecimal characters
 '''
-parser = argparse.ArgumentParser(description='Process some in
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--space', type=bool, default=False,
+                    help='
