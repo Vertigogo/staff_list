@@ -9,4 +9,5 @@ Generates a stream of random hexidecimal characters
 '''
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--space', type=bool, default=False,
-                    help='
+                    help='boolean for whether or not to include spaces between data chunks')
+parser.add_argument('--rep
