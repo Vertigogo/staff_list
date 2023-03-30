@@ -16,4 +16,5 @@ parser.add_argument('--chars', type=int, default=15,
                     help='number of characters to use per chunk, default is 15')
 parser.add_argument('--rchars_min', type=int,
                     help='random minimum number of characters to use to use per chunk')
-parser.add_argument('--rchars_ma
+parser.add_argument('--rchars_max', type=int,
+                    help='random maximum number of characters to use to use p
