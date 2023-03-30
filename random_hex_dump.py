@@ -15,4 +15,5 @@ parser.add_argument('--reps', type=int, default=10000,
 parser.add_argument('--chars', type=int, default=15,
                     help='number of characters to use per chunk, default is 15')
 parser.add_argument('--rchars_min', type=int,
-                    help=
+                    help='random minimum number of characters to use to use per chunk')
+parser.add_argument('--rchars_ma
