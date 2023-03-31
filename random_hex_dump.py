@@ -17,4 +17,6 @@ parser.add_argument('--chars', type=int, default=15,
 parser.add_argument('--rchars_min', type=int,
                     help='random minimum number of characters to use to use per chunk')
 parser.add_argument('--rchars_max', type=int,
-                    help='random maximum number of characters to use to use p
+                    help='random maximum number of characters to use to use per chunk')
+parser.add_argument('--speed', type=float, default=.07,
+                    help='
