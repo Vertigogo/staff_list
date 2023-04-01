@@ -20,4 +20,7 @@ parser.add_argument('--rchars_max', type=int,
                     help='random maximum number of characters to use to use per chunk')
 parser.add_argument('--speed', type=float, default=.07,
                     help='speed at which output will be generated, default is .07, lower is faster')
-args, 
+args, leftover = parser.parse_known_args()
+
+for i in range(args.reps):
+    sleep(arg
