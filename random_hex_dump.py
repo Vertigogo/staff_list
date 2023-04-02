@@ -23,4 +23,6 @@ parser.add_argument('--speed', type=float, default=.07,
 args, leftover = parser.parse_known_args()
 
 for i in range(args.reps):
-    sleep(arg
+    sleep(args.speed)
+    if args.rchars_max and args.rchars_min:
+        chars = random.uniform(args
