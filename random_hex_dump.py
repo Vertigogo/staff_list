@@ -25,4 +25,7 @@ args, leftover = parser.parse_known_args()
 for i in range(args.reps):
     sleep(args.speed)
     if args.rchars_max and args.rchars_min:
-        chars = random.uniform(args
+        chars = random.uniform(args.rchars_min, args.rchars_max)
+    else:
+        chars = args.chars
+    string = binas
