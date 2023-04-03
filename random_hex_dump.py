@@ -28,4 +28,6 @@ for i in range(args.reps):
         chars = random.uniform(args.rchars_min, args.rchars_max)
     else:
         chars = args.chars
-    string = binas
+    string = binascii.b2a_hex(os.urandom(chars)).decode('utf-8')
+    if args.space:
+      
