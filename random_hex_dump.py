@@ -30,4 +30,5 @@ for i in range(args.reps):
         chars = args.chars
     string = binascii.b2a_hex(os.urandom(chars)).decode('utf-8')
     if args.space:
-      
+        string = string + ' '
+    print(string, sep='', end='', flush=True)
