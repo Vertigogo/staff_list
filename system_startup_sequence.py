@@ -13,3 +13,16 @@ REMOTE = 'Remote: '
 'Protocol'
 
 'Optimizing'
+'Processing'
+
+'Compressing'
+'Decompressing'
+
+'Encrypting'
+'Decrypting'
+
+'Matrix'
+
+'Key'
+
+'H
