@@ -25,4 +25,13 @@ REMOTE = 'Remote: '
 
 'Key'
 
-'H
+'Hashing'
+
+'Storage'
+'Resource'
+
+'Enable'
+'Disable'
+
+'Downloading'
+'Uploading'
