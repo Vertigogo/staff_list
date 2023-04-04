@@ -5,4 +5,11 @@ C = ':'
 
 BEGIN = 'Beginning processing of new job'
 SEARCHING = 'Searching for'
-ATTEMPTI
+ATTEMPTING = 'Attempting access'
+REMOTE = 'Remote: '
+''
+
+'Network'
+'Protocol'
+
+'Optimizing'
